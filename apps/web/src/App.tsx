@@ -70,6 +70,8 @@ export function App() {
             media={ws.detailMedia}
             seriesDetail={ws.seriesDetail}
             loading={ws.detailLoading}
+            error={ws.detailError}
+            onRetry={() => ws.detailMedia && void ws.openMediaDetail(ws.detailMedia)}
             playlist={ws.playlistOf(ws.detailMedia)}
             uiLanguage={ws.prefs.uiLanguage}
             theaterOpen={ws.theaterOpen}

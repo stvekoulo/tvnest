@@ -11,6 +11,12 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.5](https://github.com/stvekoulo/tvnest/compare/v1.0.4...v1.0.5) (2026-10-25)
+
+### Fixes
+
+- **xtream** — Series and movie pages no longer stay stuck on "Synchronisation des métadonnées": episode loading is time-limited, cached for the session, and a slow server now shows an error with a Retry button.
+
 # [1.0.4](https://github.com/stvekoulo/tvnest/compare/v1.0.2...v1.0.4) (2026-10-25)
 
 ### Fixes

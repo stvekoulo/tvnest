@@ -10,6 +10,36 @@ import type {
 
 const vodDetailCache = new Map<string, UnifiedMedia>();
 
+// Réponse get_series_info gardée pour la session : rouvrir une série est instantané.
+// ponytail: cache en mémoire ; à persister en SQLite si les réouvertures après
+// redémarrage restent lentes sur certains serveurs.
+const seriesInfoCache = new Map<string, SeriesInfoPayload>();
+const SERIES_INFO_TIMEOUT_MS = 25_000;
+// Les positions viennent de la base : si elle est occupée (import d'une source), la fiche
+// s'affiche sans reprise plutôt que d'attendre.
+const POSITIONS_TIMEOUT_MS = 3_000;
+
+type SeriesInfoPayload = {
+  info?: Record<string, unknown>;
+  episodes?: Record<string, Array<Record<string, unknown>>>;
+} | null;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 // Enrichit la fiche complète d'un film Xtream (get_vod_info + position de reprise).
 export async function fetchXtreamMovieDetail(
   playlist: UnifiedPlaylist,
@@ -23,8 +53,8 @@ export async function fetchXtreamMovieDetail(
   const [res, pos] = await Promise.all([
     vodDetailCache.has(cacheKey)
       ? Promise.resolve(null)
-      : window.electron
-          .xtreamRequest({
+      : withTimeout(
+          window.electron.xtreamRequest({
             url: playlist.serverUrl,
             params: {
               username: playlist.username || '',
@@ -32,11 +62,15 @@ export async function fetchXtreamMovieDetail(
               action: 'get_vod_info',
               vod_id: String(movie.xtreamId),
             },
-          })
-          .catch(() => null),
-    window.electron
-      .dbGetPlaybackPosition(playlist.id, movie.xtreamId, 'vod')
-      .catch(() => null),
+          }),
+          SERIES_INFO_TIMEOUT_MS,
+          'timeout'
+        ).catch(() => null),
+    withTimeout(
+      window.electron.dbGetPlaybackPosition(playlist.id, movie.xtreamId, 'vod'),
+      POSITIONS_TIMEOUT_MS,
+      'timeout'
+    ).catch(() => null),
   ]);
 
   const cached = vodDetailCache.get(cacheKey);
@@ -120,26 +154,45 @@ export async function fetchXtreamSeriesDetail(
     return { series, seasons: [], episodesBySeason: {} };
   }
 
-  const [res, positions] = await Promise.all([
-    window.electron.xtreamRequest({
-      url: playlist.serverUrl,
-      params: {
-        username: playlist.username || '',
-        password: playlist.password || '',
-        action: 'get_series_info',
-        series_id: String(series.xtreamId),
-      },
-    }),
-    window.electron.dbGetSeriesPlaybackPositions(playlist.id, series.xtreamId),
+  const cacheKey = `${playlist.id}:${series.xtreamId}`;
+  const serverUrl = playlist.serverUrl;
+  const loadInfo = async (): Promise<SeriesInfoPayload> => {
+    const cached = seriesInfoCache.get(cacheKey);
+    if (cached) return cached;
+    const res = await withTimeout(
+      window.electron.xtreamRequest({
+        url: serverUrl,
+        params: {
+          username: playlist.username || '',
+          password: playlist.password || '',
+          action: 'get_series_info',
+          series_id: String(series.xtreamId),
+        },
+      }),
+      SERIES_INFO_TIMEOUT_MS,
+      'Le serveur IPTV met trop de temps à répondre.'
+    );
+    if (!('payload' in res)) {
+      const message = (res as { message?: string }).message;
+      throw new Error(message || 'Le serveur IPTV a refusé la demande.');
+    }
+    const payload = res.payload as SeriesInfoPayload;
+    seriesInfoCache.set(cacheKey, payload);
+    return payload;
+  };
+
+  const [payload, positions] = await Promise.all([
+    loadInfo(),
+    withTimeout(
+      window.electron.dbGetSeriesPlaybackPositions(playlist.id, series.xtreamId),
+      POSITIONS_TIMEOUT_MS,
+      'positions'
+    ).catch(() => []),
   ]);
 
   const posMap = new Map(
     (positions || []).map((p) => [p.contentXtreamId, p])
   );
-  const payload = ('payload' in res ? res.payload : null) as {
-    info?: Record<string, unknown>;
-    episodes?: Record<string, Array<Record<string, unknown>>>;
-  } | null;
 
   const episodesObj = payload?.episodes || {};
   const seasons: number[] = [];

@@ -15,6 +15,9 @@ interface MediaDetailViewProps {
   media: UnifiedMedia;
   seriesDetail: SeriesDetail | null;
   loading: boolean;
+  /** Échec du chargement de la fiche (serveur lent ou injoignable). */
+  error?: string | null;
+  onRetry?: () => void;
   playlist?: UnifiedPlaylist | null;
   uiLanguage: UiLanguage;
   theaterOpen: boolean;
@@ -40,6 +43,8 @@ export function MediaDetailView({
   media,
   seriesDetail,
   loading,
+  error,
+  onRetry,
   playlist,
   uiLanguage,
   theaterOpen,
@@ -101,7 +106,15 @@ export function MediaDetailView({
         </Button>
         {loading ? (
           <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader variant="dots" size={18} /> Synchronisation des métadonnées...
+            <Loader variant="dots" size={18} />
+            {media.kind === 'series' ? 'Chargement des épisodes…' : 'Chargement de la fiche…'}
+          </span>
+        ) : error ? (
+          <span className="inline-flex items-center gap-3 text-xs text-muted-foreground">
+            {media.kind === 'series' ? 'Épisodes indisponibles' : 'Fiche incomplète'} : {error}
+            <Button size="sm" variant="secondary" onClick={onRetry}>
+              Réessayer
+            </Button>
           </span>
         ) : null}
       </div>

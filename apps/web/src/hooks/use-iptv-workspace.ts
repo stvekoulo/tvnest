@@ -1,5 +1,5 @@
 // Hook principal d'orchestration TVNest (sources, recherche SQLite, lecteur et fiche dédiée).
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCatalogQuery } from '@/hooks/use-catalog-query';
 import { usePlaylistActions } from '@/hooks/use-playlist-actions';
 import { forgetSessionPosition, getSessionPosition } from '@/hooks/use-tvnest-player';
@@ -136,33 +136,49 @@ export function useIptvWorkspace() {
   }, [section]);
 
   // Ouvre la page complète dédiée d'un film ou d'une série avec métadonnées serveur.
+  // Fiche ouverte en dernier : une réponse plus lente d'une fiche précédente est ignorée.
+  const detailRequestRef = useRef(0);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
   const openMediaDetail = useCallback(
     async (item: UnifiedMedia) => {
+      const request = ++detailRequestRef.current;
       setDetailMedia(item);
       setSeriesDetail(null);
+      setDetailError(null);
       const source = playlistOf(item);
-      if (!source || source.kind !== 'xtream') return;
+      if (!source || source.kind !== 'xtream') {
+        setDetailLoading(false);
+        return;
+      }
 
       setDetailLoading(true);
       try {
         if (item.kind === 'series') {
           const detail = await fetchXtreamSeriesDetail(source, item);
+          if (request !== detailRequestRef.current) return;
           setSeriesDetail(detail);
           setDetailMedia(detail.series);
         } else if (item.kind === 'movie') {
           const enriched = await fetchXtreamMovieDetail(source, item);
+          if (request !== detailRequestRef.current) return;
           setDetailMedia(enriched);
         }
+      } catch (err) {
+        if (request === detailRequestRef.current) setDetailError((err as Error).message);
       } finally {
-        setDetailLoading(false);
+        if (request === detailRequestRef.current) setDetailLoading(false);
       }
     },
     [playlistOf]
   );
 
   const closeMediaDetail = useCallback(() => {
+    detailRequestRef.current += 1;
     setDetailMedia(null);
     setSeriesDetail(null);
+    setDetailError(null);
+    setDetailLoading(false);
   }, []);
 
   // Lecteur externe (MPV / VLC). Le lecteur intégré est arrêté avant : beaucoup de comptes
@@ -358,6 +374,7 @@ export function useIptvWorkspace() {
     detailLoading,
     openMediaDetail,
     closeMediaDetail,
+    detailError,
     epgByChannel: catalog.epgByChannel,
     downloads,
     recordings,
