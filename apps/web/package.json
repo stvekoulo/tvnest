@@ -1,7 +1,7 @@
 {
-  "name": "@iptvnator/web-ui",
+  "name": "@tvnest/web-ui",
   "private": true,
-  "version": "0.25.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port 4200",
