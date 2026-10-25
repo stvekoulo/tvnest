@@ -26,7 +26,9 @@ jobs:
         defaults:
             run:
                 # Windows PowerShell 5.1 : disponible pour le compte de service du runner.
-                shell: powershell
+                # Bypass limité à ce processus (la politique de la machine reste inchangée).
+                # `exit $LASTEXITCODE` : sans lui, une commande native en échec en fin d'étape passerait.
+                shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& '{0}'; exit $LASTEXITCODE"
         env:
             NX_DAEMON: 'false'
             NX_NO_CLOUD: 'true'
