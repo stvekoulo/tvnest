@@ -8,7 +8,7 @@ import { WindowTitlebar } from '@/components/shell/window-titlebar';
 import { CatalogWorkspaceView } from '@/components/views/catalog-workspace-view';
 import { DashboardBentoView } from '@/components/views/dashboard-bento-view';
 import { MediaDetailView } from '@/components/views/media-detail-view';
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { useAppUpdate } from '@/hooks/use-app-update';
 import { useIptvWorkspace } from '@/hooks/use-iptv-workspace';
 import { useSourceAutoRefresh } from '@/hooks/use-source-auto-refresh';
@@ -54,10 +54,32 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Chaque rubrique ou fiche s'ouvre en haut de page, pas à la position de la précédente.
-  useEffect(() => {
+  // Rubrique ou fiche : en haut de page. Retour d'une fiche : la liste reprend où elle était.
+  const listScrollTop = useRef(0);
+  const detailId = ws.detailMedia?.id;
+  useLayoutEffect(() => {
+    listScrollTop.current = 0;
     mainRef.current?.scrollTo({ top: 0 });
-  }, [ws.section, ws.detailMedia?.id]);
+  }, [ws.section]);
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    const target = detailId ? 0 : listScrollTop.current;
+    main.scrollTo({ top: target });
+    const content = main.firstElementChild;
+    if (main.scrollTop >= target - 1 || !content) return;
+    // Résultats rechargés après coup (recherche) : on réapplique quand le contenu grandit.
+    const observer = new ResizeObserver(() => {
+      main.scrollTo({ top: target });
+      if (main.scrollTop >= target - 1) observer.disconnect();
+    });
+    observer.observe(content);
+    const stop = window.setTimeout(() => observer.disconnect(), 3000);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(stop);
+    };
+  }, [detailId]);
   // L'aperçu reste en place sous le Cinéma : le lecteur unique y revient sans rechargement.
   const suppressPreviewPlayer = Boolean(ws.detailMedia);
 
@@ -78,6 +100,7 @@ export function App() {
             activeMedia={ws.activeMedia}
             onBack={ws.closeMediaDetail}
             onPlayInline={(item) => ws.playStream(item, false)}
+            onPlayAt={(item, position, theater) => void ws.playAt(item, position, theater)}
             onStopPlayback={ws.stopPlayback}
             onOpenExternal={(player, item) => void ws.openExternal(player, item)}
             onPlayTheater={(item) => ws.playStream(item, true)}
@@ -294,7 +317,13 @@ export function App() {
           onOpenAddSource={() => ws.setAddSourceOpen(true)}
         />
 
-        <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
+        <main
+          ref={mainRef}
+          className="min-h-0 flex-1 overflow-y-auto"
+          onScroll={(e) => {
+            if (!detailId) listScrollTop.current = e.currentTarget.scrollTop;
+          }}
+        >
           <Suspense fallback={null}>{renderSection()}</Suspense>
         </main>
       </div>

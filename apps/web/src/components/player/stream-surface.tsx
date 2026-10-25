@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
 import { recordMediaWatchProgress } from '@/services/ipc-system.service';
 import type { UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
-import { NEXT_EPISODE_LEAD_SECONDS, NextEpisodeCard } from './next-episode-card';
+import { NextEpisodeCard, nextEpisodeLeadSeconds } from './next-episode-card';
 import { PlayerOsdControls } from './player-osd-controls';
 
 /** Émis par l'hôte du lecteur après un déplacement : un <video> retiré du document se met en pause. */
@@ -91,7 +91,7 @@ export function StreamSurface({
     !compact &&
     Boolean(nextEpisode && onPlayNext) &&
     player.duration > 0 &&
-    player.duration - player.position <= NEXT_EPISODE_LEAD_SECONDS &&
+    player.duration - player.position <= nextEpisodeLeadSeconds(player.duration) &&
     nextDismissedFor !== media.id;
 
   // Fenêtre native libmpv : la console est posée SOUS la vidéo, jamais par-dessus.

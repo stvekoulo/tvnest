@@ -1,5 +1,5 @@
 // Barre d'actions @beui de la fiche détaillée Film / Série (lecture, favori, MPV/VLC, téléchargement).
-import { Download, ExternalLink, Heart, Maximize2, Play, Tv } from 'lucide-react';
+import { Download, ExternalLink, Heart, Maximize2, Play, RotateCcw, Tv } from 'lucide-react';
 import { useState } from 'react';
 import { ActionSwapButton } from '@/components/motion/action-swap';
 import { Button, StatefulButton, type ButtonState } from '@/components/motion/button';
@@ -12,8 +12,10 @@ interface MediaDetailActionsProps {
   media: UnifiedMedia;
   playlist?: UnifiedPlaylist | null;
   uiLanguage: UiLanguage;
+  /** Point de reprise (« S1E3 · 12:34 »), vide si rien n'est entamé. */
   resumeLabel: string;
   onPlayInline: () => void;
+  onRestart?: () => void;
   onPlayTheater: () => void;
   onToggleFavorite: () => void;
   onDownload: () => Promise<void>;
@@ -25,6 +27,7 @@ export function MediaDetailActions({
   uiLanguage,
   resumeLabel,
   onPlayInline,
+  onRestart,
   onPlayTheater,
   onToggleFavorite,
   onDownload,
@@ -46,10 +49,15 @@ export function MediaDetailActions({
     <div className="flex flex-wrap items-center gap-2.5 pt-1">
       <Button size="lg" variant="primary" ripple onClick={onPlayInline}>
         <Play className="size-4 fill-current" />
-        {resumeLabel
-          ? `${t(uiLanguage, 'resumeWatch')} (${resumeLabel})`
-          : 'Lire dans TVNest Cinema'}
+        {resumeLabel ? `${t(uiLanguage, 'resumeWatch')} · ${resumeLabel}` : 'Lire dans TVNest Cinema'}
       </Button>
+
+      {onRestart ? (
+        <Button size="lg" variant="secondary" onClick={onRestart}>
+          <RotateCcw className="size-4" />
+          Recommencer
+        </Button>
+      ) : null}
 
       <Button size="lg" variant="secondary" onClick={onPlayTheater}>
         <Maximize2 className="size-4" />

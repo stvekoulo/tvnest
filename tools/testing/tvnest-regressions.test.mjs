@@ -221,3 +221,23 @@ test('next episode follows episode order and crosses into the next season', asyn
     assert.equal(nextEpisodeIn(queue, 'show-ep-21'), null, 'nothing after the last episode');
     assert.equal(nextEpisodeIn(queue, 'unknown'), null);
 });
+
+test('series detail resumes the last started episode, session position first', async () => {
+    const { findResumeEpisode } = await loadSource('apps/web/src/lib/series-episodes.ts');
+    const ep = (id, episodeNum, progressSeconds, durationSeconds = 1500) => ({
+        id, seasonNum: 1, episodeNum, title: `E${episodeNum}`, containerExtension: 'mkv',
+        streamUrl: `u/${id}`, progressSeconds, durationSeconds,
+    });
+    const detail = {
+        series: { ...item, id: 'show', kind: 'series', title: 'Show' },
+        seasons: [1],
+        episodesBySeason: { 1: [ep('1', 1, 1490), ep('2', 2, 300), ep('3', 3, 0)] },
+    };
+    const none = () => undefined;
+    const point = findResumeEpisode(detail, none);
+    assert.equal(point.item.id, 'show-ep-2', 'a finished episode is not a resume point');
+    assert.equal(point.positionSeconds, 300);
+    assert.equal(point.label, 'S1E2 · 5:00');
+    assert.equal(findResumeEpisode(detail, (id) => (id === 'show-ep-3' ? 90 : undefined)).item.id, 'show-ep-3');
+    assert.equal(findResumeEpisode({ ...detail, episodesBySeason: { 1: [ep('3', 3, 0)] } }, none), null);
+});

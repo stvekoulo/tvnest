@@ -1,4 +1,5 @@
 // Épisodes d'une série sous forme de médias lisibles, dans l'ordre de visionnage.
+import { formatClock, shouldOfferResume } from '@/lib/resume-point';
 import type { SeriesDetail, SeriesEpisode, UnifiedMedia } from '@/types/iptv.types';
 
 export function buildEpisodeMedia(series: UnifiedMedia, ep: SeriesEpisode): UnifiedMedia {
@@ -22,15 +23,38 @@ export function buildEpisodeMedia(series: UnifiedMedia, ep: SeriesEpisode): Unif
   };
 }
 
-/** Tous les épisodes, saison par saison puis par numéro d'épisode. */
-export function listEpisodeMedia(detail: SeriesDetail): UnifiedMedia[] {
+function sortedEpisodes(detail: SeriesDetail): SeriesEpisode[] {
   return [...detail.seasons]
     .sort((a, b) => a - b)
-    .flatMap((season) =>
-      [...(detail.episodesBySeason[season] ?? [])]
-        .sort((a, b) => a.episodeNum - b.episodeNum)
-        .map((ep) => buildEpisodeMedia(detail.series, ep))
-    );
+    .flatMap((season) => [...(detail.episodesBySeason[season] ?? [])].sort((a, b) => a.episodeNum - b.episodeNum));
+}
+
+/** Tous les épisodes, saison par saison puis par numéro d'épisode. */
+export function listEpisodeMedia(detail: SeriesDetail): UnifiedMedia[] {
+  return sortedEpisodes(detail).map((ep) => buildEpisodeMedia(detail.series, ep));
+}
+
+export interface ResumePoint {
+  item: UnifiedMedia;
+  positionSeconds: number;
+  /** « S1E3 · 12:34 » */
+  label: string;
+}
+
+/** Dernier épisode entamé dans l'ordre de visionnage (position de session prioritaire). */
+export function findResumeEpisode(
+  detail: SeriesDetail,
+  sessionPosition: (id: string) => number | undefined
+): ResumePoint | null {
+  let found: ResumePoint | null = null;
+  for (const ep of sortedEpisodes(detail)) {
+    const item = buildEpisodeMedia(detail.series, ep);
+    const position = sessionPosition(item.id) ?? ep.progressSeconds ?? 0;
+    if (shouldOfferResume(position, ep.durationSeconds)) {
+      found = { item, positionSeconds: position, label: `S${ep.seasonNum}E${ep.episodeNum} · ${formatClock(position)}` };
+    }
+  }
+  return found;
 }
 
 /** Épisode qui suit `currentId` (saison suivante après le dernier), ou null. */

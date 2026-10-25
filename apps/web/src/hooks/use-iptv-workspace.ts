@@ -269,19 +269,27 @@ export function useIptvWorkspace() {
     [prefs.defaultPlayer, openExternal, openMediaDetail, startPlayback]
   );
 
+  // Lecture à une position choisie (Reprendre / Recommencer), sans redemander.
+  const playAt = useCallback(
+    async (item: UnifiedMedia, positionSeconds: number, expandTheater = false) => {
+      if (positionSeconds <= 0) forgetSessionPosition(item.id);
+      if (prefs.defaultPlayer !== 'builtin' && isElectronRuntime()) {
+        await openExternal(prefs.defaultPlayer, item, positionSeconds || undefined);
+        return;
+      }
+      startPlayback({ ...item, progressSeconds: positionSeconds }, expandTheater);
+    },
+    [prefs.defaultPlayer, openExternal, startPlayback]
+  );
+
   const answerResumePrompt = useCallback(
     (choice: 'resume' | 'restart' | 'cancel') => {
       const prompt = resumePrompt;
       setResumePrompt(null);
       if (!prompt || choice === 'cancel') return;
-      if (choice === 'restart') {
-        forgetSessionPosition(prompt.item.id);
-        startPlayback({ ...prompt.item, progressSeconds: 0 }, prompt.expand);
-      } else {
-        startPlayback({ ...prompt.item, progressSeconds: prompt.positionSeconds }, prompt.expand);
-      }
+      void playAt(prompt.item, choice === 'restart' ? 0 : prompt.positionSeconds, prompt.expand);
     },
-    [resumePrompt, startPlayback]
+    [resumePrompt, playAt]
   );
 
   const toggleFavorite = useCallback(
@@ -357,6 +365,7 @@ export function useIptvWorkspace() {
     setIsPlaying,
     openExternal,
     resumePrompt,
+    playAt,
     answerResumePrompt,
     nextEpisode,
     playNextEpisode,

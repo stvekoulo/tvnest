@@ -7,8 +7,11 @@ import { Loader } from '@/components/motion/loader';
 import { PlayerSlot } from '@/components/player/player-host';
 import { MediaDetailActions } from '@/components/views/media-detail-actions';
 import { SeriesEpisodesPanel } from '@/components/views/series-episodes-panel';
+import { getSessionPosition } from '@/hooks/use-tvnest-player';
 import { t, type UiLanguage } from '@/lib/i18n';
-import { listEpisodeMedia } from '@/lib/series-episodes';
+import { formatClock, shouldOfferResume } from '@/lib/resume-point';
+import { findResumeEpisode, listEpisodeMedia, type ResumePoint } from '@/lib/series-episodes';
+import { fetchSavedPlaybackPosition } from '@/services/ipc-system.service';
 import type { SeriesDetail, UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 
 interface MediaDetailViewProps {
@@ -25,18 +28,13 @@ interface MediaDetailViewProps {
   activeMedia: UnifiedMedia | null;
   onBack: () => void;
   onPlayInline: (item: UnifiedMedia) => void;
+  /** Lecture directe à une position (boutons Reprendre / Recommencer de la fiche). */
+  onPlayAt: (item: UnifiedMedia, positionSeconds: number, theater: boolean) => void;
   onStopPlayback: () => void;
   onOpenExternal: (player: 'mpv' | 'vlc', item: UnifiedMedia) => void;
   onPlayTheater: (item: UnifiedMedia) => void;
   onToggleFavorite: (item: UnifiedMedia) => void;
   onDownload: (item: UnifiedMedia) => Promise<void>;
-}
-
-function formatResumeTime(seconds?: number): string {
-  if (!seconds || seconds < 10) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 export function MediaDetailView({
@@ -51,6 +49,7 @@ export function MediaDetailView({
   activeMedia,
   onBack,
   onPlayInline,
+  onPlayAt,
   onStopPlayback,
   onOpenExternal,
   onPlayTheater,
@@ -65,6 +64,29 @@ export function MediaDetailView({
   useEffect(() => {
     setInlineActive(false);
   }, [media.id]);
+
+  // Position enregistrée du film, relue à l'ouverture et à l'arrêt de la lecture.
+  const [savedMovie, setSavedMovie] = useState<{ positionSeconds: number; durationSeconds?: number } | null>(null);
+  const playingSomething = activeMedia !== null;
+  useEffect(() => {
+    if (media.kind !== 'movie') return;
+    let cancelled = false;
+    void fetchSavedPlaybackPosition(media).then((saved) => {
+      if (!cancelled) setSavedMovie(saved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [media, playingSomething]);
+
+  const resume: ResumePoint | null = (() => {
+    if (media.kind === 'series') return seriesDetail ? findResumeEpisode(seriesDetail, getSessionPosition) : null;
+    const position = getSessionPosition(media.id) ?? savedMovie?.positionSeconds ?? media.progressSeconds ?? 0;
+    const duration = savedMovie?.durationSeconds ?? media.durationSeconds;
+    return shouldOfferResume(position, duration)
+      ? { item: media, positionSeconds: position, label: formatClock(position) }
+      : null;
+  })();
 
   // Lecture arrêtée (croix du lecteur) : la fiche réaffiche son en-tête.
   useEffect(() => {
@@ -89,6 +111,11 @@ export function MediaDetailView({
   const startInlinePlayback = (target: UnifiedMedia) => {
     setInlineActive(true);
     onPlayInline(target);
+  };
+
+  const playResumePoint = (point: ResumePoint, positionSeconds: number, theater: boolean) => {
+    if (!theater) setInlineActive(true);
+    onPlayAt(point.item, positionSeconds, theater);
   };
 
   const resolvePlayTarget = (): UnifiedMedia | null => {
@@ -213,12 +240,15 @@ export function MediaDetailView({
                   media={media}
                   playlist={playlist}
                   uiLanguage={uiLanguage}
-                  resumeLabel={formatResumeTime(media.progressSeconds)}
+                  resumeLabel={resume?.label ?? ''}
                   onPlayInline={() => {
+                    if (resume) return playResumePoint(resume, resume.positionSeconds, false);
                     const target = resolvePlayTarget();
                     if (target) startInlinePlayback(target);
                   }}
+                  onRestart={resume ? () => playResumePoint(resume, 0, false) : undefined}
                   onPlayTheater={() => {
+                    if (resume) return playResumePoint(resume, resume.positionSeconds, true);
                     const target = resolvePlayTarget();
                     if (target) onPlayTheater(target);
                   }}

@@ -5,8 +5,15 @@ import { useEffect, useState } from 'react';
 import { MediaArtwork } from '@/components/cards/media-artwork';
 import type { UnifiedMedia } from '@/types/iptv.types';
 
-/** Affichée pendant le générique de fin : les dernières secondes de l'épisode. */
-export const NEXT_EPISODE_LEAD_SECONDS = 20;
+/**
+ * Début estimé du générique de fin : 1 % de la durée, entre 15 s et 25 s, pour ne
+ * jamais couper la fin de l'épisode (34:30 → carte à 34:09, enchaînement à 34:14).
+ * ponytail: estimation, les flux Xtream ne donnent pas de marqueur de générique.
+ */
+export function nextEpisodeLeadSeconds(durationSeconds: number): number {
+  return Math.min(25, Math.max(15, Math.round(durationSeconds * 0.01)));
+}
+
 export const NEXT_EPISODE_COUNTDOWN_SECONDS = 5;
 
 interface NextEpisodeCardProps {

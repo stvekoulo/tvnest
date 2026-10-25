@@ -11,6 +11,13 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.6](https://github.com/stvekoulo/tvnest/compare/v1.0.5...v1.0.6) (2026-10-25)
+
+### Fixes
+
+- **player** — Movie and series pages now show Resume (with the episode and time) and Restart buttons directly. The next-episode card appears when the end credits are estimated to start, not in the last seconds of the file.
+- **ui** — Going back from a movie or series page returns to the same place in the list (catalog, home, favorites, history or search) instead of the top.
+
 # [1.0.5](https://github.com/stvekoulo/tvnest/compare/v1.0.4...v1.0.5) (2026-10-25)
 
 ### Fixes
