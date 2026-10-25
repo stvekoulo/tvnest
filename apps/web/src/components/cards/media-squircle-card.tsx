@@ -61,7 +61,7 @@ export function MediaSquircleCard({
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent opacity-80 transition-opacity group-hover:opacity-95" />
 
         {/* Badges supérieurs */}
-        <div className="absolute inset-x-2.5 top-2.5 flex items-center justify-between gap-1.5">
+        <div className="absolute inset-x-2.5 top-2.5 z-10 flex items-center justify-between gap-1.5">
           {isLive ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
               <span className="size-1.5 animate-pulse rounded-full bg-white" />

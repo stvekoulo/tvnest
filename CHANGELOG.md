@@ -17,6 +17,7 @@ this marker — see `.changes/README.md`.
 
 - **player** — Movie and series pages now show Resume (with the episode and time) and Restart buttons directly. The next-episode card appears when the end credits are estimated to start, not in the last seconds of the file.
 - **ui** — Going back from a movie or series page returns to the same place in the list (catalog, home, favorites, history or search) instead of the top.
+- **ui** — The heart button on catalog, home and search cards adds or removes the favorite again instead of opening the movie or series page.
 
 # [1.0.5](https://github.com/stvekoulo/tvnest/compare/v1.0.4...v1.0.5) (2026-10-25)
 
