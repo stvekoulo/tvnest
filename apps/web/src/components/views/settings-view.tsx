@@ -1,5 +1,5 @@
 // Paramètres système TVNest : Thème OLED, Langues par défaut, libmpv intégré, Réseau et SQLite.
-import { Database, Globe, Moon, Save, Smartphone, Sun, Trash2 } from 'lucide-react';
+import { Database, Globe, Maximize2, Minimize2, Moon, Save, Smartphone, Sun, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button, StatefulButton, type ButtonState } from '@/components/motion/button';
 import {
@@ -20,6 +20,7 @@ import {
   INTERFACE_LANGUAGES,
   type UiLanguage,
 } from '@/lib/i18n';
+import { toggleAppFullscreen, useAppFullscreen } from '@/lib/app-fullscreen';
 import { useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
@@ -39,6 +40,7 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: SettingsViewProps) {
+  const appFullscreen = useAppFullscreen();
   const { theme, setTheme } = useTheme();
   const [mpvPath, setMpvPath] = useState(prefs.mpvPlayerPath);
   const [vlcPath, setVlcPath] = useState(prefs.vlcPlayerPath);
@@ -214,6 +216,27 @@ export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: Sett
         />
 
         <div className="space-y-4">
+          <section className="space-y-3 rounded-[26px] border border-border bg-card p-6">
+            <p className="text-sm font-bold text-foreground">Affichage</p>
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-elevated px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-foreground">Démarrer en plein écran</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Ouvre TVNest en plein écran à chaque lancement (F11 pour en sortir).
+                </p>
+              </div>
+              <Switch
+                checked={prefs.startupFullscreen}
+                onCheckedChange={(v) => onUpdatePrefs({ startupFullscreen: v })}
+                ariaLabel="Démarrer en plein écran"
+              />
+            </div>
+            <Button size="sm" variant="secondary" onClick={() => void toggleAppFullscreen()}>
+              {appFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              {appFullscreen ? 'Quitter le plein écran' : 'Passer en plein écran maintenant'}
+            </Button>
+          </section>
+
           <SettingsUpdateCard
             update={appUpdate}
             autoUpdate={prefs.autoUpdate}

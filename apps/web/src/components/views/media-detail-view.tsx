@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { MediaArtwork } from '@/components/cards/media-artwork';
 import { Button } from '@/components/motion/button/base';
 import { Loader } from '@/components/motion/loader';
-import { StreamSurface } from '@/components/player/stream-surface';
+import { PlayerSlot } from '@/components/player/player-host';
 import { MediaDetailActions } from '@/components/views/media-detail-actions';
 import { SeriesEpisodesPanel } from '@/components/views/series-episodes-panel';
 import { t, type UiLanguage } from '@/lib/i18n';
@@ -17,7 +17,11 @@ interface MediaDetailViewProps {
   playlist?: UnifiedPlaylist | null;
   uiLanguage: UiLanguage;
   theaterOpen: boolean;
+  /** Média du lecteur unique de l'application (affiché ici en lecture intégrée). */
+  activeMedia: UnifiedMedia | null;
   onBack: () => void;
+  onPlayInline: (item: UnifiedMedia) => void;
+  onStopPlayback: () => void;
   onPlayTheater: (item: UnifiedMedia) => void;
   onToggleFavorite: (item: UnifiedMedia) => void;
   onDownload: (item: UnifiedMedia) => Promise<void>;
@@ -37,25 +41,34 @@ export function MediaDetailView({
   playlist,
   uiLanguage,
   theaterOpen,
+  activeMedia,
   onBack,
+  onPlayInline,
+  onStopPlayback,
   onPlayTheater,
   onToggleFavorite,
   onDownload,
 }: MediaDetailViewProps) {
-  const [inlineMedia, setInlineMedia] = useState<UnifiedMedia | null>(null);
-  const [inlinePlaying, setInlinePlaying] = useState(false);
+  // La lecture intégrée utilise le lecteur unique de l'application : passer en plein écran
+  // puis revenir ne recharge pas le flux.
+  const [inlineActive, setInlineActive] = useState(false);
+  const inlineMedia = inlineActive ? activeMedia : null;
 
   useEffect(() => {
-    setInlineMedia(null);
-    setInlinePlaying(false);
+    setInlineActive(false);
   }, [media.id]);
+
+  // Lecture arrêtée (croix du lecteur) : la fiche réaffiche son en-tête.
+  useEffect(() => {
+    if (!activeMedia) setInlineActive(false);
+  }, [activeMedia]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !theaterOpen && !document.fullscreenElement) {
         if (inlineMedia) {
-          setInlinePlaying(false);
-          setInlineMedia(null);
+          setInlineActive(false);
+          onStopPlayback();
         } else {
           onBack();
         }
@@ -63,11 +76,11 @@ export function MediaDetailView({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inlineMedia, theaterOpen, onBack]);
+  }, [inlineMedia, theaterOpen, onBack, onStopPlayback]);
 
   const startInlinePlayback = (target: UnifiedMedia) => {
-    setInlineMedia(target);
-    setInlinePlaying(true);
+    setInlineActive(true);
+    onPlayInline(target);
   };
 
   const resolvePlayTarget = (): UnifiedMedia | null => {
@@ -105,22 +118,9 @@ export function MediaDetailView({
 
       {/* Scène Hero ou Lecteur intégré TVNest Cinema */}
       <section className="relative overflow-hidden rounded-[28px] border border-border bg-card shadow-xl">
-        {inlineMedia && !theaterOpen ? (
+        {inlineMedia ? (
           <div className="aspect-video max-h-[68vh] w-full bg-black">
-            <StreamSurface
-              media={inlineMedia}
-              playlist={playlist}
-              playing={inlinePlaying}
-              onPlayingChange={setInlinePlaying}
-              onExpandTheater={() => {
-                setInlinePlaying(false);
-                onPlayTheater(inlineMedia);
-              }}
-              onCloseTheater={() => {
-                setInlinePlaying(false);
-                setInlineMedia(null);
-              }}
-            />
+            <PlayerSlot compact={false} />
           </div>
         ) : (
           <div className="relative min-h-[380px] p-6 sm:p-8 lg:p-10">

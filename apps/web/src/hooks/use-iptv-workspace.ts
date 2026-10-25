@@ -69,6 +69,14 @@ export function useIptvWorkspace() {
 
   const catalog = useCatalogQuery(activePlaylist, section, prefs, notify);
 
+  // Source d'un média : un résultat de la recherche globale peut venir d'une autre source
+  // que la source active (identifiants Xtream, user-agent…).
+  const playlistOf = useCallback(
+    (item: UnifiedMedia | null | undefined) =>
+      (item && playlists.find((p) => p.id === item.playlistId)) || activePlaylist,
+    [playlists, activePlaylist]
+  );
+
   const refreshPlaylists = useCallback(async () => {
     setLoading(true);
     try {
@@ -121,23 +129,24 @@ export function useIptvWorkspace() {
     async (item: UnifiedMedia) => {
       setDetailMedia(item);
       setSeriesDetail(null);
-      if (!activePlaylist || activePlaylist.kind !== 'xtream') return;
+      const source = playlistOf(item);
+      if (!source || source.kind !== 'xtream') return;
 
       setDetailLoading(true);
       try {
         if (item.kind === 'series') {
-          const detail = await fetchXtreamSeriesDetail(activePlaylist, item);
+          const detail = await fetchXtreamSeriesDetail(source, item);
           setSeriesDetail(detail);
           setDetailMedia(detail.series);
         } else if (item.kind === 'movie') {
-          const enriched = await fetchXtreamMovieDetail(activePlaylist, item);
+          const enriched = await fetchXtreamMovieDetail(source, item);
           setDetailMedia(enriched);
         }
       } finally {
         setDetailLoading(false);
       }
     },
-    [activePlaylist]
+    [playlistOf]
   );
 
   const closeMediaDetail = useCallback(() => {
@@ -152,7 +161,7 @@ export function useIptvWorkspace() {
         return;
       }
       if (prefs.defaultPlayer !== 'builtin' && isElectronRuntime()) {
-        await launchExternalPlayer(prefs.defaultPlayer, item, activePlaylist);
+        await launchExternalPlayer(prefs.defaultPlayer, item, playlistOf(item));
         notify(`Ouvert dans ${prefs.defaultPlayer.toUpperCase()}`);
         return;
       }
@@ -160,7 +169,7 @@ export function useIptvWorkspace() {
       setIsPlaying(true);
       if (expandTheater) setTheaterOpen(true);
     },
-    [activePlaylist, prefs.defaultPlayer, notify, openMediaDetail]
+    [playlistOf, prefs.defaultPlayer, notify, openMediaDetail]
   );
 
   const toggleFavorite = useCallback(
@@ -208,6 +217,7 @@ export function useIptvWorkspace() {
     setSidebarCollapsed,
     playlists,
     activePlaylist,
+    playlistOf,
     setActivePlaylistId: (id: string | null) => {
       setDetailMedia(null);
       setActivePlaylistId(id);
@@ -233,6 +243,11 @@ export function useIptvWorkspace() {
     activeMedia,
     isPlaying,
     setIsPlaying,
+    stopPlayback: () => {
+      setTheaterOpen(false);
+      setIsPlaying(false);
+      setActiveMedia(null);
+    },
     theaterOpen,
     setTheaterOpen,
     addSourceOpen,

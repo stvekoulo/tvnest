@@ -31,6 +31,7 @@ export function loadPreferences(): AppPreferences {
     parentalLockEnabled: false,
     autoUpdate: true,
     sourceRefreshDays: 0,
+    startupFullscreen: false,
   };
   if (!raw) return defaults;
   try {
@@ -61,6 +62,7 @@ export async function savePreferences(prefs: AppPreferences): Promise<void> {
       .updateSettings({
         mpvPlayerArguments,
         embeddedMpvFrameCopy: prefs.embeddedMpvEnabled,
+        startupWindowMode: prefs.startupFullscreen ? 'fullscreen' : 'normal',
       })
       .catch(() => {}),
   ]);

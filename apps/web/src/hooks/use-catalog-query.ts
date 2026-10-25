@@ -76,6 +76,11 @@ export function useCatalogQuery(
     [activePlaylist?.id, section]
   );
   const [filters, setFilters] = useState<CatalogFilterState>(() => createDefaultFilters(prefs));
+  // La recherche, comme le groupe, appartient à la rubrique où elle a été tapée : elle ne
+  // suit pas de Séries vers Films, Live ou l'EPG.
+  const [searchSelection, setSearchSelection] = useState({ scope: scopeOf(section), value: '' });
+  const search = searchSelection.scope === scopeOf(section) ? searchSelection.value : '';
+  const scopedFilters = useMemo<CatalogFilterState>(() => ({ ...filters, search }), [filters, search]);
   const [items, setItems] = useState<UnifiedMedia[]>([]);
   const [totalMatches, setTotalMatches] = useState<number>(0);
   const [availableYears, setAvailableYears] = useState<string[]>([]);
@@ -152,7 +157,8 @@ export function useCatalogQuery(
 
   // Exécute la requête SQLite filtrée avec anti-rebond léger (100 ms).
   useEffect(() => {
-    if (!activePlaylist) {
+    // La page Recherche interroge elle-même toutes les sources.
+    if (!activePlaylist || section === 'search') {
       setItems([]);
       setTotalMatches(0);
       return;
@@ -162,8 +168,8 @@ export function useCatalogQuery(
       setCatalogLoading(true);
       try {
         const effectiveFilters: CatalogFilterState = {
-          ...filters,
-          onlyFavorites: section === 'favorites' ? true : filters.onlyFavorites,
+          ...scopedFilters,
+          onlyFavorites: section === 'favorites' ? true : scopedFilters.onlyFavorites,
         };
         const res = await queryFilteredCatalog(activePlaylist, {
           type: queryType,
@@ -203,7 +209,7 @@ export function useCatalogQuery(
     activePlaylist,
     queryType,
     selectedCategoryName,
-    filters,
+    scopedFilters,
     section,
     prefs.preferredContentLanguage,
     onError,
@@ -214,8 +220,8 @@ export function useCatalogQuery(
     setCatalogLoading(true);
     try {
       const effectiveFilters: CatalogFilterState = {
-        ...filters,
-        onlyFavorites: section === 'favorites' ? true : filters.onlyFavorites,
+        ...scopedFilters,
+        onlyFavorites: section === 'favorites' ? true : scopedFilters.onlyFavorites,
       };
       const res = await queryFilteredCatalog(activePlaylist, {
         type: queryType,
@@ -236,20 +242,31 @@ export function useCatalogQuery(
     catalogLoading,
     items.length,
     totalMatches,
-    filters,
+    scopedFilters,
     section,
     queryType,
     selectedCategoryName,
     prefs.preferredContentLanguage,
   ]);
 
-  const updateFilters = useCallback((patch: Partial<CatalogFilterState>) => {
-    setFilters((prev) => ({ ...prev, ...patch }));
-  }, []);
+  const updateFilters = useCallback(
+    (patch: Partial<CatalogFilterState>, forSection?: AppSection) => {
+      const { search: nextSearch, ...rest } = patch;
+      if (nextSearch !== undefined) {
+        setSearchSelection({
+          scope: `${activePlaylist?.id ?? ''}|${forSection ?? section}`,
+          value: nextSearch,
+        });
+      }
+      if (Object.keys(rest).length > 0) setFilters((prev) => ({ ...prev, ...rest }));
+    },
+    [activePlaylist?.id, section]
+  );
 
   const resetFilters = useCallback(() => {
     setFilters(createDefaultFilters(prefs));
-  }, [prefs]);
+    setSearchSelection({ scope: `${activePlaylist?.id ?? ''}|${section}`, value: '' });
+  }, [prefs, activePlaylist?.id, section]);
 
   const patchMediaFavorite = useCallback((mediaId: string, isFavorite: boolean) => {
     const patchList = (list: UnifiedMedia[]) =>
@@ -270,7 +287,7 @@ export function useCatalogQuery(
     highlights,
     selectedCategory,
     setSelectedCategory,
-    filters,
+    filters: scopedFilters,
     updateFilters,
     resetFilters,
     items,

@@ -10,6 +10,9 @@ import { launchExternalPlayer, recordMediaWatchProgress } from '@/services/ipc-s
 import type { UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 import { PlayerOsdControls } from './player-osd-controls';
 
+/** Émis par l'hôte du lecteur après un déplacement : un <video> retiré du document se met en pause. */
+export const PLAYER_MOVED_EVENT = 'tvnest:player-moved';
+
 interface StreamSurfaceProps {
   media: UnifiedMedia;
   playlist?: UnifiedPlaylist | null;
@@ -17,7 +20,10 @@ interface StreamSurfaceProps {
   onPlayingChange: (v: boolean) => void;
   compact?: boolean;
   onExpandTheater?: () => void;
+  /** Quitte le mode Cinéma (bouton plein écran, F, Échap) : la lecture continue en aperçu. */
   onCloseTheater?: () => void;
+  /** Croix de la console : arrête la lecture. */
+  onStop?: () => void;
 }
 
 export function StreamSurface({
@@ -28,6 +34,7 @@ export function StreamSurface({
   compact = false,
   onExpandTheater,
   onCloseTheater,
+  onStop,
 }: StreamSurfaceProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -35,6 +42,9 @@ export function StreamSurface({
   const hideTimerRef = useRef<number | null>(null);
   const [osdVisible, setOsdVisible] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  // Le lecteur est créé une fois puis déplacé : ces choix restent ceux du premier affichage.
+  const [startedCompact] = useState(compact);
+  const autoMutedRef = useRef(startedCompact);
 
   const player = useTvNestPlayer({
     media,
@@ -43,11 +53,28 @@ export function StreamSurface({
     onPlayingChange,
     hostRef,
     videoRef,
-    // Les aperçus compacts vivent dans des zones qui défilent : une fenêtre libmpv native
-    // n'y serait pas découpée par le conteneur. Le moteur Web reste dans le DOM.
-    preferWebEngine: compact,
-    initialMuted: compact,
+    // Un aperçu vit dans une zone qui défile : une fenêtre libmpv native n'y serait pas
+    // découpée par le conteneur. Le rendu libmpv dans un canvas (frame-copy) reste utilisé.
+    avoidNativeView: startedCompact,
+    initialMuted: startedCompact,
   });
+
+  // Aperçu muet passé en grand : le son revient, une seule fois (un « muet » choisi est gardé).
+  useEffect(() => {
+    if (compact || !autoMutedRef.current) return;
+    autoMutedRef.current = false;
+    if (player.muted) player.toggleMute();
+  }, [compact, player]);
+
+  // Déplacé dans une autre vue : le <video> a été mis en pause par le navigateur, on reprend.
+  useEffect(() => {
+    const onMoved = () => {
+      const v = videoRef.current;
+      if (playing && v && v.paused && player.engine !== 'libmpv') v.play().catch(() => {});
+    };
+    window.addEventListener(PLAYER_MOVED_EVENT, onMoved);
+    return () => window.removeEventListener(PLAYER_MOVED_EVENT, onMoved);
+  }, [playing, player.engine]);
 
   // Fenêtre native libmpv : la console est posée SOUS la vidéo, jamais par-dessus.
   const nativeDocked = !compact && player.engine === 'libmpv' && player.mpvMode === 'native';
@@ -67,17 +94,11 @@ export function StreamSurface({
     };
   }, [revealOsd]);
 
+  // Plein écran = mode Cinéma : on y entre depuis un aperçu, on en sort depuis le Cinéma.
   const toggleFullscreen = useCallback(() => {
-    if (onExpandTheater) {
-      onExpandTheater();
-      return;
-    }
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      stageRef.current?.requestFullscreen?.().catch(() => {});
-    }
-  }, [onExpandTheater]);
+    if (onExpandTheater) onExpandTheater();
+    else onCloseTheater?.();
+  }, [onExpandTheater, onCloseTheater]);
 
   useEffect(() => {
     if (compact) return;
@@ -289,8 +310,9 @@ export function StreamSurface({
           onToggleRecording={player.toggleRecording}
           onRequestPip={() => videoRef.current?.requestPictureInPicture?.().catch(() => {})}
           onToggleFullscreen={toggleFullscreen}
+          isFullscreen={!onExpandTheater}
           onOpenExternal={(p) => launchExternalPlayer(p, media, playlist)}
-          onClose={onCloseTheater}
+          onClose={onStop}
         />
       )}
     </div>

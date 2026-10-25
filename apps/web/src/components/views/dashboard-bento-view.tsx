@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { MediaArtwork } from '@/components/cards/media-artwork';
 import { Button } from '@/components/motion/button/base';
 import { Switch } from '@/components/motion/switch';
-import { StreamSurface } from '@/components/player/stream-surface';
+import { PlayerSlot } from '@/components/player/player-host';
 import { DashboardHeroRow, EmptyOnboardingState } from '@/components/views/dashboard-hero-row';
 import { MediaRailSection } from '@/components/views/media-rail-section';
 import type { DashboardHighlightsState } from '@/hooks/use-catalog-query';
@@ -215,14 +215,7 @@ export function DashboardBentoView({
         <div className="relative col-span-12 h-[240px] overflow-hidden rounded-[28px] border border-border bg-black text-white md:col-span-7 lg:col-span-4">
           {activeMedia && !suppressPreviewPlayer ? (
             <>
-              <StreamSurface
-                media={activeMedia}
-                playlist={activePlaylist}
-                playing={isPlaying}
-                onPlayingChange={onSetPlaying}
-                compact
-                onExpandTheater={onExpandTheater}
-              />
+              <PlayerSlot />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/60" />
               <div className="absolute inset-x-5 top-4 flex items-center justify-between">
                 <div className="min-w-0 pr-2">

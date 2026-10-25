@@ -3,7 +3,7 @@ import { Maximize2, PlusCircle, Radio } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { MediaSquircleCard } from '@/components/cards/media-squircle-card';
 import { Button } from '@/components/motion/button/base';
-import { StreamSurface } from '@/components/player/stream-surface';
+import { PlayerSlot } from '@/components/player/player-host';
 import { CatalogFilterBar } from '@/components/views/catalog-filter-bar';
 import { t, type UiLanguage } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -212,17 +212,11 @@ export function CatalogWorkspaceView({
       </div>
 
       {/* Panneau latéral Live TV : Aperçu direct + Guide EPG */}
-      {isLiveSection && activeMedia && !suppressPreviewPlayer ? (
+      {/* Aperçu réservé aux chaînes en direct : un film ou un épisode n'a rien à faire ici. */}
+      {isLiveSection && activeMedia?.kind === 'live' && !suppressPreviewPlayer ? (
         <aside className="hidden w-[320px] shrink-0 flex-col border-l border-border bg-surface p-5 xl:flex">
           <div className="relative aspect-video w-full overflow-hidden rounded-[22px] border border-border bg-black shadow-lg">
-            <StreamSurface
-              media={activeMedia}
-              playlist={playlist}
-              playing={isPlaying}
-              onPlayingChange={onSetPlaying}
-              compact
-              onExpandTheater={onExpandTheater}
-            />
+            <PlayerSlot />
           </div>
 
           <div className="mt-4 flex items-start justify-between gap-2">

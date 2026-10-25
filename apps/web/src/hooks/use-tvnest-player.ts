@@ -81,6 +81,8 @@ export interface UseTvNestPlayerOptions {
   hostRef: RefObject<HTMLDivElement | null>;
   videoRef: RefObject<HTMLVideoElement | null>;
   preferWebEngine?: boolean;
+  /** N'utilise pas la fenêtre libmpv native (le rendu frame-copy dans un canvas reste permis). */
+  avoidNativeView?: boolean;
   initialMuted?: boolean;
 }
 
@@ -92,6 +94,7 @@ export function useTvNestPlayer({
   hostRef,
   videoRef,
   preferWebEngine = false,
+  avoidNativeView = false,
   initialMuted = false,
 }: UseTvNestPlayerOptions) {
   const [engine, setEngine] = useState<PlayerEngineKind>('html5');
@@ -199,7 +202,8 @@ export function useTvNestPlayer({
         window.electron.setPlaybackKeepAwake(true).catch(() => {});
       }
 
-      if (isElectronRuntime() && Boolean(support.supported) && !forcedWeb) {
+      const nativeViewAvoided = avoidNativeView && support.engine !== 'frame-copy';
+      if (isElectronRuntime() && Boolean(support.supported) && !forcedWeb && !nativeViewAvoided) {
         try {
           const mode =
             support.engine === 'frame-copy' ? 'frame-copy' : 'native';

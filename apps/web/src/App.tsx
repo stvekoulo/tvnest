@@ -1,11 +1,13 @@
 // Coque principale TVNest Desktop (Noir Absolu OLED, fiche dédiée plein écran et libmpv).
 import { SourceImportModal } from '@/components/modals/source-import-modal';
-import { StreamSurface } from '@/components/player/stream-surface';
+import { PlayerHost, requestAppFullscreen } from '@/components/player/player-host';
+import { toggleAppFullscreen } from '@/lib/app-fullscreen';
 import { UnifiedSidebar } from '@/components/shell/unified-sidebar';
 import { WindowTitlebar } from '@/components/shell/window-titlebar';
 import { CatalogWorkspaceView } from '@/components/views/catalog-workspace-view';
 import { DashboardBentoView } from '@/components/views/dashboard-bento-view';
 import { DownloadsView } from '@/components/views/downloads-view';
+import { GlobalSearchView } from '@/components/views/global-search-view';
 import { EpgGuideView } from '@/components/views/epg-guide-view';
 import { MediaDetailView } from '@/components/views/media-detail-view';
 import { PlaylistsManagerView } from '@/components/views/playlists-manager-view';
@@ -27,11 +29,23 @@ export function App() {
   });
   const mainRef = useRef<HTMLElement | null>(null);
 
+  // F11 : plein écran de toute l'interface (comme le bouton de la barre de titre).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'F11') return;
+      e.preventDefault();
+      void toggleAppFullscreen();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Chaque rubrique ou fiche s'ouvre en haut de page, pas à la position de la précédente.
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [ws.section, ws.detailMedia?.id]);
-  const suppressPreviewPlayer = ws.theaterOpen || Boolean(ws.detailMedia);
+  // L'aperçu reste en place sous le Cinéma : le lecteur unique y revient sans rechargement.
+  const suppressPreviewPlayer = Boolean(ws.detailMedia);
 
   const renderSection = () => {
     // Toute fiche Film ou Série s'ouvre dans sa propre page dédiée pleine largeur (sans modal).
@@ -42,10 +56,13 @@ export function App() {
             media={ws.detailMedia}
             seriesDetail={ws.seriesDetail}
             loading={ws.detailLoading}
-            playlist={ws.activePlaylist}
+            playlist={ws.playlistOf(ws.detailMedia)}
             uiLanguage={ws.prefs.uiLanguage}
             theaterOpen={ws.theaterOpen}
+            activeMedia={ws.activeMedia}
             onBack={ws.closeMediaDetail}
+            onPlayInline={(item) => ws.playStream(item, false)}
+            onStopPlayback={ws.stopPlayback}
             onPlayTheater={(item) => ws.playStream(item, true)}
             onToggleFavorite={ws.toggleFavorite}
             onDownload={ws.downloadMedia}
@@ -82,7 +99,10 @@ export function App() {
               ws.setSelectedCategory(cat.id, target);
             }}
             onNavigateSection={ws.setSection}
-            onExpandTheater={() => ws.setTheaterOpen(true)}
+            onExpandTheater={() => {
+              requestAppFullscreen();
+              ws.setTheaterOpen(true);
+            }}
           />
         );
 
@@ -144,7 +164,10 @@ export function App() {
             onPlay={ws.playStream}
             onOpenDetail={ws.openMediaDetail}
             onToggleFavorite={ws.toggleFavorite}
-            onExpandTheater={() => ws.setTheaterOpen(true)}
+            onExpandTheater={() => {
+              requestAppFullscreen();
+              ws.setTheaterOpen(true);
+            }}
           />
         );
       }
@@ -157,6 +180,18 @@ export function App() {
             onUpdatePrefs={ws.updatePrefs}
             onPlay={(item) => ws.playStream(item, false)}
             onNotify={ws.notify}
+          />
+        );
+
+      case 'search':
+        return (
+          <GlobalSearchView
+            query={ws.filters.search}
+            playlists={ws.playlists}
+            epgByChannel={ws.epgByChannel}
+            onPlay={(item) => ws.playStream(item, true)}
+            onOpenDetail={ws.openMediaDetail}
+            onToggleFavorite={ws.toggleFavorite}
           />
         );
 
@@ -193,6 +228,15 @@ export function App() {
   };
 
   return (
+    <PlayerHost
+      media={ws.activeMedia}
+      playlist={ws.playlistOf(ws.activeMedia)}
+      playing={ws.isPlaying}
+      onPlayingChange={ws.setIsPlaying}
+      theaterOpen={ws.theaterOpen}
+      onTheaterChange={ws.setTheaterOpen}
+      onStop={ws.stopPlayback}
+    >
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <UnifiedSidebar
         section={ws.section}
@@ -215,10 +259,14 @@ export function App() {
           onSelectPlaylist={ws.setActivePlaylistId}
           searchQuery={ws.filters.search}
           onSearchChange={(q) => {
-            ws.updateFilters({ search: q });
             if (ws.detailMedia) ws.closeMediaDetail();
+            // Depuis l'Accueil, la recherche porte sur toutes les sources (page Recherche) ;
+            // ailleurs elle reste attachée à la rubrique courante.
             if (ws.section === 'dashboard' && q.trim().length > 0) {
-              ws.setSection('movies');
+              ws.setSection('search');
+              ws.updateFilters({ search: q }, 'search');
+            } else {
+              ws.updateFilters({ search: q });
             }
           }}
           syncLabel={ws.syncLabel}
@@ -235,31 +283,13 @@ export function App() {
         addSource={ws.addSource}
       />
 
-      {/* Mode Cinéma Plein Écran TVNest (instance unique StreamSurface) */}
-      {ws.theaterOpen && ws.activeMedia ? (
-        <div className="fixed inset-0 z-50 bg-black/95 p-3 sm:p-5">
-          <div className="h-full w-full overflow-hidden rounded-[26px] border border-white/15 shadow-2xl">
-            <StreamSurface
-              media={ws.activeMedia}
-              playlist={ws.activePlaylist}
-              playing={ws.isPlaying}
-              onPlayingChange={ws.setIsPlaying}
-              onCloseTheater={() => {
-                // Fermer le Cinéma met en pause : sinon l'aperçu de l'Accueil relance le flux seul.
-                ws.setTheaterOpen(false);
-                ws.setIsPlaying(false);
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
-
       {ws.toast ? (
         <div className="fixed bottom-5 right-5 z-50 rounded-full border border-primary/40 bg-elevated px-4 py-2 text-xs font-semibold text-foreground shadow-2xl">
           {ws.toast}
         </div>
       ) : null}
     </div>
+    </PlayerHost>
   );
 }
 

@@ -283,3 +283,31 @@ async function loadFallbackM3uCatalog(playlist: UnifiedPlaylist): Promise<{
   );
   return { categories, items };
 }
+
+// Recherche dans toutes les sources de la base (Live, Films, Séries), sans filtre de langue
+// ni de groupe : utilisée par la recherche lancée depuis l'Accueil.
+export async function searchAllSources(
+  playlists: UnifiedPlaylist[],
+  query: string,
+  limitPerSource = 60
+): Promise<UnifiedMedia[]> {
+  const filters: CatalogFilterState = {
+    search: query,
+    language: 'ALL',
+    quality: 'ALL',
+    minRating: 0,
+    year: '',
+    onlyFavorites: false,
+    hasCatchup: false,
+    hasEpg: false,
+    sortBy: 'relevance',
+  };
+  const perSource = await Promise.all(
+    playlists.map((pl) =>
+      queryFilteredCatalog(pl, { type: 'all', categoryName: null, filters, limit: limitPerSource })
+        .then((res) => res.items)
+        .catch(() => [] as UnifiedMedia[])
+    )
+  );
+  return perSource.flat();
+}

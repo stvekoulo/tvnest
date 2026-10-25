@@ -105,7 +105,8 @@ export function PlayerOsdHeader({
           <button
             type="button"
             onClick={onClose}
-            title="Fermer (Échap)"
+            title="Arrêter la lecture"
+            aria-label="Arrêter la lecture"
             className="inline-flex size-8 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white hover:bg-white/20"
           >
             <X className="size-4" />

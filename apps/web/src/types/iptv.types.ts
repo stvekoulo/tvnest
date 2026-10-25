@@ -17,7 +17,9 @@ export type AppSection =
   | 'favorites'
   | 'history'
   | 'downloads'
-  | 'settings';
+  | 'settings'
+  /** Recherche multi-sources lancée depuis l'Accueil. */
+  | 'search';
 
 export type PortalKind =
   | 'm3u-url'
@@ -160,6 +162,8 @@ export interface AppPreferences {
   autoUpdate: boolean;
   /** Actualisation des sources au démarrage : 0 = jamais, sinon tous les N jours (1 à 7). */
   sourceRefreshDays: number;
+  /** Ouvre TVNest directement en plein écran (appliqué au prochain lancement). */
+  startupFullscreen: boolean;
 }
 
 export type {

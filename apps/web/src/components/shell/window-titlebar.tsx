@@ -1,5 +1,5 @@
 // Barre supérieure native TVNest (frameless) avec contrôles @beui, thème OLED/Clair et recherche.
-import { Loader2, Minus, Plus, Search, Square, Tv, X } from 'lucide-react';
+import { Loader2, Maximize2, Minimize2, Minus, Plus, Search, Square, Tv, X } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
 import { Input } from '@/components/motion/input';
 import {
@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/motion/select';
 import { ThemeToggle } from '@/components/motion/theme-toggle';
+import { toggleAppFullscreen, useAppFullscreen } from '@/lib/app-fullscreen';
 import { t, type UiLanguage } from '@/lib/i18n';
 import { controlNativeWindow } from '@/services/ipc-system.service';
 import type { UnifiedPlaylist } from '@/types/iptv.types';
@@ -37,6 +38,7 @@ export function WindowTitlebar({
   uiLanguage,
   onOpenAddSource,
 }: WindowTitlebarProps) {
+  const fullscreen = useAppFullscreen();
   return (
     <header
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
@@ -107,6 +109,16 @@ export function WindowTitlebar({
           <Plus className="size-3.5" />
           <span className="hidden sm:inline">{t(uiLanguage, 'addSource')}</span>
         </Button>
+
+        <button
+          type="button"
+          aria-label={fullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+          title={fullscreen ? 'Quitter le plein écran (F11)' : 'Plein écran (F11)'}
+          onClick={() => void toggleAppFullscreen()}
+          className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {fullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+        </button>
 
         {isElectron ? (
           <div className="ml-1 flex items-center gap-1 border-l border-border pl-2.5">

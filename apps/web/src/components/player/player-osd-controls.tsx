@@ -2,6 +2,7 @@
 import {
   Circle,
   Maximize2,
+  Minimize2,
   Pause,
   PictureInPicture2,
   Play,
@@ -70,6 +71,8 @@ interface PlayerOsdControlsProps {
   onToggleRecording: () => void;
   onRequestPip?: () => void;
   onToggleFullscreen: () => void;
+  /** Déjà en mode Cinéma plein écran : le bouton en sort. */
+  isFullscreen?: boolean;
   onOpenExternal: (player: 'mpv' | 'vlc') => void;
   onClose?: () => void;
 }
@@ -94,6 +97,7 @@ export function PlayerOsdControls(props: PlayerOsdControlsProps) {
     onToggleRecording,
     onRequestPip,
     onToggleFullscreen,
+    isFullscreen = false,
   } = props;
 
   const isLive = media.kind === 'live';
@@ -294,10 +298,11 @@ export function PlayerOsdControls(props: PlayerOsdControlsProps) {
               <button
                 type="button"
                 onClick={onToggleFullscreen}
-                title="Plein écran (F)"
+                aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+                title={isFullscreen ? 'Quitter le plein écran (F / Échap)' : 'Plein écran (F)'}
                 className="inline-flex size-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-zinc-200 hover:bg-white/20"
               >
-                <Maximize2 className="size-3.5" />
+                {isFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
               </button>
             </div>
           </div>
