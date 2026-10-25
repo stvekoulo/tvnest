@@ -1,5 +1,18 @@
 # Xtream Portal Compatibility
 
+## TVNest React playback and filters
+
+The React catalog stores all filters by playlist ID and section. Reset affects
+only the active section; global language preferences still apply across sections.
+Playback URL construction uses `normalizeXtreamServerUrl` and encodes each
+trimmed credential as a path segment. Cinema uses `XTREAM_CLIENT_USER_AGENT`
+for Xtream streams unless the media or playlist supplies an override.
+Regression coverage: `node --test tools/testing/tvnest-regressions.test.mjs`.
+On Windows with a built helper, `node --test tools/testing/tvnest-native-playback.test.mjs`
+also checks HTTP playback in libmpv with the local video fixture. This checks
+the resolved source and native decoder, without exercising Electron's UI or a
+real provider account.
+
 This document captures the Xtream Codes compatibility rules shared by the
 Electron and PWA paths.
 

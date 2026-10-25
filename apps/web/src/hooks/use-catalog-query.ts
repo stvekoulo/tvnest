@@ -1,5 +1,6 @@
 // Hook de requêtage réactif SQLite / M3U avec filtres multicritères, pagination et EPG.
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCatalogFilters } from './use-catalog-filters';
 import {
   fetchCategoriesWithCounts,
   fetchDashboardHighlights,
@@ -36,20 +37,6 @@ const EMPTY_HIGHLIGHTS: DashboardHighlightsState = {
   continueWatching: [],
 };
 
-function createDefaultFilters(prefs: AppPreferences): CatalogFilterState {
-  return {
-    search: '',
-    language: prefs.autoFilterByLanguage ? prefs.preferredContentLanguage : 'ALL',
-    quality: 'ALL',
-    minRating: 0,
-    year: '',
-    onlyFavorites: false,
-    hasCatchup: false,
-    hasEpg: false,
-    sortBy: 'relevance',
-  };
-}
-
 export function useCatalogQuery(
   activePlaylist: UnifiedPlaylist | null,
   section: AppSection,
@@ -75,12 +62,11 @@ export function useCatalogQuery(
       }),
     [activePlaylist?.id, section]
   );
-  const [filters, setFilters] = useState<CatalogFilterState>(() => createDefaultFilters(prefs));
-  // La recherche, comme le groupe, appartient à la rubrique où elle a été tapée : elle ne
-  // suit pas de Séries vers Films, Live ou l'EPG.
-  const [searchSelection, setSearchSelection] = useState({ scope: scopeOf(section), value: '' });
-  const search = searchSelection.scope === scopeOf(section) ? searchSelection.value : '';
-  const scopedFilters = useMemo<CatalogFilterState>(() => ({ ...filters, search }), [filters, search]);
+  const {
+    filters: scopedFilters,
+    updateFilters,
+    resetFilters,
+  } = useCatalogFilters(activePlaylist?.id ?? '', section, prefs);
   const [items, setItems] = useState<UnifiedMedia[]>([]);
   const [totalMatches, setTotalMatches] = useState<number>(0);
   const [availableYears, setAvailableYears] = useState<string[]>([]);
@@ -88,16 +74,9 @@ export function useCatalogQuery(
   const [catalogLoading, setCatalogLoading] = useState<boolean>(false);
   const [epgByChannel, setEpgByChannel] = useState<Record<string, EpgProgram | null>>({});
 
-  useEffect(() => {
-    setFilters((prev) => ({
-      ...prev,
-      language: prefs.autoFilterByLanguage ? prefs.preferredContentLanguage : prev.language,
-    }));
-  }, [prefs.autoFilterByLanguage, prefs.preferredContentLanguage]);
-
   // Charge les catégories comptées et les sélections Accueil dès que la playlist change.
   // Les groupes suivent la langue du filtre (celle des Paramètres quand le filtre auto est actif).
-  const languageFilter = filters.language;
+  const languageFilter = scopedFilters.language;
   useEffect(() => {
     if (!activePlaylist) {
       setCategories([]);
@@ -121,9 +100,7 @@ export function useCatalogQuery(
       const dash = await fetchDashboardHighlights(activePlaylist, prefs.preferredContentLanguage);
       setHighlights(dash);
 
-      const epgIds = dash.liveChannels
-        .map((c) => c.tvgId)
-        .filter((x): x is string => Boolean(x));
+      const epgIds = dash.liveChannels.map((c) => c.tvgId).filter((x): x is string => Boolean(x));
       if (epgIds.length > 0) {
         const map = await fetchCurrentEpgForChannels(epgIds);
         setEpgByChannel((prev) => ({ ...prev, ...map }));
@@ -150,7 +127,7 @@ export function useCatalogQuery(
         ? null
         : (() => {
             const cat = categories.find((c) => c.id === selectedCategory);
-            return cat ? cat.rawName ?? cat.name : null;
+            return cat ? (cat.rawName ?? cat.name) : null;
           })(),
     [categories, selectedCategory]
   );
@@ -248,25 +225,6 @@ export function useCatalogQuery(
     selectedCategoryName,
     prefs.preferredContentLanguage,
   ]);
-
-  const updateFilters = useCallback(
-    (patch: Partial<CatalogFilterState>, forSection?: AppSection) => {
-      const { search: nextSearch, ...rest } = patch;
-      if (nextSearch !== undefined) {
-        setSearchSelection({
-          scope: `${activePlaylist?.id ?? ''}|${forSection ?? section}`,
-          value: nextSearch,
-        });
-      }
-      if (Object.keys(rest).length > 0) setFilters((prev) => ({ ...prev, ...rest }));
-    },
-    [activePlaylist?.id, section]
-  );
-
-  const resetFilters = useCallback(() => {
-    setFilters(createDefaultFilters(prefs));
-    setSearchSelection({ scope: `${activePlaylist?.id ?? ''}|${section}`, value: '' });
-  }, [prefs, activePlaylist?.id, section]);
 
   const patchMediaFavorite = useCallback((mediaId: string, isFavorite: boolean) => {
     const patchList = (list: UnifiedMedia[]) =>

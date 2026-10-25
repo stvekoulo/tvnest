@@ -11,6 +11,14 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.3](https://github.com/stvekoulo/tvnest/compare/v1.0.2...v1.0.3) (2026-10-25)
+
+### Fixes
+
+- **player** — Catalog filters stay independent for each tab and source. TVNest Cinema normalizes Xtream playback URLs, handles special characters in credentials, and uses the standard IPTV client identity unless a custom user agent is configured.
+
+
+
 # [0.24.0](https://github.com/4gray/iptvnator/compare/v0.23.0...v0.24.0) (2026-09-24)
 
 

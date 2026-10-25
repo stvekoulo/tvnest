@@ -12,11 +12,12 @@ import type {
 import type {
   CatalogFilterState,
   CatalogSortMode,
-  StreamKind,
   UnifiedCategory,
   UnifiedMedia,
   UnifiedPlaylist,
 } from '@/types/iptv.types';
+import { buildXtreamStreamUrl } from './xtream-stream-url';
+export { buildXtreamStreamUrl } from './xtream-stream-url';
 
 const SORT_TO_BACKEND: Record<CatalogSortMode, DbCatalogQueryPayload['sortBy']> = {
   relevance: 'recommended',
@@ -26,21 +27,6 @@ const SORT_TO_BACKEND: Record<CatalogSortMode, DbCatalogQueryPayload['sortBy']> 
   'title-desc': 'title_desc',
   'year-desc': 'year_desc',
 };
-
-export function buildXtreamStreamUrl(
-  playlist: UnifiedPlaylist,
-  streamId: number,
-  kind: StreamKind,
-  ext?: string
-): string {
-  const base = (playlist.serverUrl || '').replace(/\/$/, '');
-  const u = playlist.username || '';
-  const p = playlist.password || '';
-  const safeExt = ext || (kind === 'live' ? 'm3u8' : 'mp4');
-  if (kind === 'live') return `${base}/live/${u}/${p}/${streamId}.${safeExt}`;
-  if (kind === 'movie') return `${base}/movie/${u}/${p}/${streamId}.${safeExt}`;
-  return `${base}/series/${u}/${p}/${streamId}.${safeExt}`;
-}
 
 export function mapDbCatalogRow(
   playlist: UnifiedPlaylist,

@@ -1,4 +1,5 @@
 // Résolveur universel de lecture TVNest (Xtream, Stalker create_link, M3U & libmpv).
+import { XTREAM_CLIENT_USER_AGENT } from '@iptvnator/shared/interfaces';
 import type {
   EmbeddedMpvSupport,
   PlayerContentInfo,
@@ -134,7 +135,10 @@ export async function resolveMediaPlayback(
     );
   }
 
-  const userAgent = activeItem.userAgent || playlist?.userAgent || undefined;
+  const userAgent =
+    activeItem.userAgent?.trim() ||
+    playlist?.userAgent?.trim() ||
+    (activeItem.portalKind === 'xtream' ? XTREAM_CLIENT_USER_AGENT : undefined);
   const referer = activeItem.referrer || undefined;
   const headers: Record<string, string> = {};
   if (userAgent) headers['User-Agent'] = userAgent;
