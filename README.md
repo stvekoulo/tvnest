@@ -47,7 +47,8 @@ L'installeur est écrit dans `dist/executables/`.
 Le workflow [`build-windows.yml`](.github/workflows/build-windows.yml) tourne sur un runner
 GitHub Actions auto-hébergé (Windows x64) :
 
-- push sur `master` ou lancement manuel : installeur disponible dans les artefacts du workflow ;
+- push sur `master` ou lancement manuel : installeur copié sur la machine du runner, dans le dossier
+  `TVNEST_INSTALLERS_DIR` défini dans le fichier `.env` du runner ;
 - tag `v*` (par exemple `v0.26.0`) : installeur publié dans une Release GitHub, utilisée par la
   mise à jour automatique.
 

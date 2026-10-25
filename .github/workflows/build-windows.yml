@@ -1,7 +1,7 @@
 # Installeur Windows TVNest, construit sur le runner auto-hébergé (machine locale).
 # Un runner auto-hébergé ne consomme aucune minute GitHub Actions.
 #
-# - push sur master / lancement manuel : installeur .exe en artefact du workflow
+# - push sur master / lancement manuel : installeur .exe copié dans TVNEST_INSTALLERS_DIR
 # - tag v* (ex. v0.26.0) : installeur publié dans une Release GitHub (mise à jour auto)
 name: Build Windows installer
 
@@ -71,13 +71,15 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: pnpm run make:app -- --publishPolicy=always
 
-            - name: Upload installer
-              uses: actions/upload-artifact@v7
-              with:
-                  name: tvnest-windows-x64
-                  if-no-files-found: error
-                  retention-days: 14
-                  path: |
-                      dist/executables/*.exe
-                      dist/executables/*.blockmap
-                      dist/executables/latest.yml
+            # Pas d'artefact GitHub (quota de stockage du compte indisponible) : l'installeur est
+            # copié sur la machine du runner, dans TVNEST_INSTALLERS_DIR (défini dans le .env du runner).
+            - name: Copy installer to local folder
+              run: |
+                  if (-not $env:TVNEST_INSTALLERS_DIR) {
+                      Write-Output "::warning::TVNEST_INSTALLERS_DIR absent du .env du runner : installeur laissé dans dist/executables."
+                      exit 0
+                  }
+                  $dest = Join-Path $env:TVNEST_INSTALLERS_DIR ("{0}-{1}" -f $env:GITHUB_REF_NAME, $env:GITHUB_SHA.Substring(0, 7))
+                  New-Item -ItemType Directory -Force $dest | Out-Null
+                  Copy-Item dist/executables/*.exe, dist/executables/*.blockmap, dist/executables/latest.yml -Destination $dest
+                  Write-Output "Installeur copié dans $dest"
