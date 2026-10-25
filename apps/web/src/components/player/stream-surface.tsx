@@ -1,13 +1,14 @@
 // Surface vidéo universelle TVNest Cinema (libmpv WebGL2 / HWND + HLS.js + MPEG-TS).
-import { Cpu, ExternalLink, Tv } from 'lucide-react';
+import { Cpu, ExternalLink, RotateCw, Tv } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/motion/button/base';
 import { Loader } from '@/components/motion/loader';
 import { useTvNestPlayer } from '@/hooks/use-tvnest-player';
 import { cn } from '@/lib/utils';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
-import { launchExternalPlayer, recordMediaWatchProgress } from '@/services/ipc-system.service';
+import { recordMediaWatchProgress } from '@/services/ipc-system.service';
 import type { UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
+import { NEXT_EPISODE_LEAD_SECONDS, NextEpisodeCard } from './next-episode-card';
 import { PlayerOsdControls } from './player-osd-controls';
 
 /** Émis par l'hôte du lecteur après un déplacement : un <video> retiré du document se met en pause. */
@@ -24,6 +25,11 @@ interface StreamSurfaceProps {
   onCloseTheater?: () => void;
   /** Croix de la console : arrête la lecture. */
   onStop?: () => void;
+  /** Ouvre le média dans MPV / VLC à la position atteinte (le lecteur intégré s'arrête). */
+  onOpenExternal?: (player: 'mpv' | 'vlc', positionSeconds: number) => void;
+  /** Épisode qui suit dans la série : proposé (puis lancé) à la fin de celui-ci. */
+  nextEpisode?: UnifiedMedia | null;
+  onPlayNext?: () => void;
 }
 
 export function StreamSurface({
@@ -35,6 +41,9 @@ export function StreamSurface({
   onExpandTheater,
   onCloseTheater,
   onStop,
+  onOpenExternal,
+  nextEpisode,
+  onPlayNext,
 }: StreamSurfaceProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +84,15 @@ export function StreamSurface({
     window.addEventListener(PLAYER_MOVED_EVENT, onMoved);
     return () => window.removeEventListener(PLAYER_MOVED_EVENT, onMoved);
   }, [playing, player.engine]);
+
+  // « Épisode suivant » : pendant le générique de fin, sauf si l'utilisateur l'a annulé.
+  const [nextDismissedFor, setNextDismissedFor] = useState<string | null>(null);
+  const showNextEpisode =
+    !compact &&
+    Boolean(nextEpisode && onPlayNext) &&
+    player.duration > 0 &&
+    player.duration - player.position <= NEXT_EPISODE_LEAD_SECONDS &&
+    nextDismissedFor !== media.id;
 
   // Fenêtre native libmpv : la console est posée SOUS la vidéo, jamais par-dessus.
   const nativeDocked = !compact && player.engine === 'libmpv' && player.mpvMode === 'native';
@@ -166,7 +184,11 @@ export function StreamSurface({
       ref={stageRef}
       onMouseMove={revealOsd}
       onDoubleClick={toggleFullscreen}
-      className="relative flex h-full w-full flex-col overflow-hidden bg-black select-none"
+      className={cn(
+        'relative flex h-full w-full flex-col overflow-hidden bg-black select-none',
+        // En Cinéma, le curseur disparaît avec la console pour ne pas rester sur l'image.
+        !compact && playing && !osdVisible && 'cursor-none'
+      )}
     >
       <div ref={hostRef} className="relative flex min-h-0 w-full flex-1 items-center justify-center">
       {/* Surface WebGL2 zéro-copie pour libmpv frame-copy */}
@@ -251,6 +273,9 @@ export function StreamSurface({
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center">
           <p className="max-w-md text-xs font-medium text-zinc-200">{player.error}</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button size="sm" variant="primary" onClick={player.retry}>
+              <RotateCw className="size-3.5" /> Réessayer
+            </Button>
             {player.mpvAvailable && player.forcedWeb ? (
               <Button size="sm" variant="primary" onClick={() => player.setForcedWeb(false)}>
                 <Cpu className="size-3.5" /> Activer libmpv intégré
@@ -258,10 +283,10 @@ export function StreamSurface({
             ) : null}
             {isElectronRuntime() ? (
               <>
-                <Button size="sm" variant="glass" onClick={() => launchExternalPlayer('mpv', media, playlist)}>
+                <Button size="sm" variant="glass" onClick={() => onOpenExternal?.('mpv', player.position)}>
                   <Tv className="size-3.5" /> Ouvrir dans MPV
                 </Button>
-                <Button size="sm" variant="glass" onClick={() => launchExternalPlayer('vlc', media, playlist)}>
+                <Button size="sm" variant="glass" onClick={() => onOpenExternal?.('vlc', player.position)}>
                   <ExternalLink className="size-3.5" /> Ouvrir dans VLC
                 </Button>
               </>
@@ -270,6 +295,15 @@ export function StreamSurface({
         </div>
       ) : null}
       </div>
+
+      {showNextEpisode && nextEpisode && onPlayNext ? (
+        <NextEpisodeCard
+          key={media.id}
+          next={nextEpisode}
+          onPlayNext={onPlayNext}
+          onDismiss={() => setNextDismissedFor(media.id)}
+        />
+      ) : null}
 
       {/* Mode compact (aperçu Accueil) ou Console OSD complète */}
       {compact ? null : (
@@ -311,7 +345,7 @@ export function StreamSurface({
           onRequestPip={() => videoRef.current?.requestPictureInPicture?.().catch(() => {})}
           onToggleFullscreen={toggleFullscreen}
           isFullscreen={!onExpandTheater}
-          onOpenExternal={(p) => launchExternalPlayer(p, media, playlist)}
+          onOpenExternal={(p) => onOpenExternal?.(p, player.position)}
           onClose={onStop}
         />
       )}

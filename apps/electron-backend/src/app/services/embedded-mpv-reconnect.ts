@@ -50,6 +50,13 @@ import { isEmbeddedMpvSessionGoneError } from './embedded-mpv-session-errors';
  */
 
 export const EMBEDDED_MPV_RECONNECT_MAX_ATTEMPTS = 6;
+/**
+ * Retries of a stream that never started playing. IPTV servers often refuse the
+ * first request (busy line, connection still held by the previous channel) and
+ * accept the next one: a few retries before showing an error, but no long retry
+ * loop on a stream that is really dead.
+ */
+export const EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS = 3;
 export const EMBEDDED_MPV_RECONNECT_BASE_DELAY_MS = 2_000;
 export const EMBEDDED_MPV_RECONNECT_MAX_DELAY_MS = 30_000;
 export const EMBEDDED_MPV_RECONNECT_STABLE_PLAYBACK_MS = 30_000;
@@ -70,6 +77,11 @@ export interface EmbeddedMpvReconnectState {
     playback: ResolvedPortalPlayback | null;
     /** Whether that playback reached `playing` at least once. */
     hadPlayed: boolean;
+    /**
+     * A user load that has not played yet and was not paused: its failures are
+     * retried up to EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS times.
+     */
+    firstLoad: boolean;
     /** Attempts spent on the current outage. */
     attempts: number;
     /** Start of the current uninterrupted `playing` stretch. */
@@ -115,6 +127,7 @@ export function createEmbeddedMpvReconnectState(
         enabled,
         playback: null,
         hadPlayed: false,
+        firstLoad: false,
         attempts: 0,
         playingSince: null,
         attemptInFlight: false,
@@ -188,6 +201,7 @@ export class EmbeddedMpvReconnectCoordinator {
         this.clearTimer(state);
         state.playback = playback;
         state.hadPlayed = false;
+        state.firstLoad = true;
         state.attempts = 0;
         state.playingSince = null;
         state.attemptInFlight = false;
@@ -225,6 +239,7 @@ export class EmbeddedMpvReconnectCoordinator {
     onUserPause(state: EmbeddedMpvReconnectState): void {
         this.cancel(state);
         state.hadPlayed = false;
+        state.firstLoad = false;
     }
 
     /**
@@ -273,6 +288,7 @@ export class EmbeddedMpvReconnectCoordinator {
 
         if (status === 'playing') {
             state.hadPlayed = true;
+            state.firstLoad = false;
             if (state.playingSince === null) {
                 state.playingSince = now;
             } else if (
@@ -309,6 +325,7 @@ export class EmbeddedMpvReconnectCoordinator {
                 // Disarmed until the stream plays again: reloading a stream
                 // the user paused would resume it without them asking.
                 state.hadPlayed = false;
+                state.firstLoad = false;
             }
             this.cancel(state);
             return null;
@@ -332,7 +349,13 @@ export class EmbeddedMpvReconnectCoordinator {
         state: EmbeddedMpvReconnectState,
         now: number
     ): EmbeddedMpvReconnectInfo | null {
-        if (!state.enabled || state.playback === null || !state.hadPlayed) {
+        const firstLoadRetry =
+            state.firstLoad && state.attempts < EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS;
+        if (
+            !state.enabled ||
+            state.playback === null ||
+            (!state.hadPlayed && !firstLoadRetry)
+        ) {
             state.pending = null;
             return null;
         }
@@ -349,7 +372,9 @@ export class EmbeddedMpvReconnectCoordinator {
         const playback = this.playbackForReload(state.playback, state);
         state.pending = {
             attempt,
-            maxAttempts: EMBEDDED_MPV_RECONNECT_MAX_ATTEMPTS,
+            maxAttempts: state.hadPlayed
+                ? EMBEDDED_MPV_RECONNECT_MAX_ATTEMPTS
+                : EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS,
             nextAttemptAt: new Date(now + delay).toISOString(),
         };
         this.log.log(

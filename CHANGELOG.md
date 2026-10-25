@@ -11,6 +11,12 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.4](https://github.com/stvekoulo/tvnest/compare/v1.0.2...v1.0.4) (2026-10-25)
+
+### Fixes
+
+- **player** — TVNest keeps its own profile and database instead of sharing IPTVnator's (existing data is copied once). Started videos offer Resume or Restart, the next episode starts after a 5-second countdown, MPV/VLC launches free the built-in stream and report errors, and failed streams retry before showing a Retry button.
+
 # [1.0.2](https://github.com/stvekoulo/tvnest/compare/v1.0.1...v1.0.2) (2026-10-25)
 
 ### Fixes

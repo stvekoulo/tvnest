@@ -8,6 +8,7 @@ import { PlayerSlot } from '@/components/player/player-host';
 import { MediaDetailActions } from '@/components/views/media-detail-actions';
 import { SeriesEpisodesPanel } from '@/components/views/series-episodes-panel';
 import { t, type UiLanguage } from '@/lib/i18n';
+import { listEpisodeMedia } from '@/lib/series-episodes';
 import type { SeriesDetail, UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 
 interface MediaDetailViewProps {
@@ -22,6 +23,7 @@ interface MediaDetailViewProps {
   onBack: () => void;
   onPlayInline: (item: UnifiedMedia) => void;
   onStopPlayback: () => void;
+  onOpenExternal: (player: 'mpv' | 'vlc', item: UnifiedMedia) => void;
   onPlayTheater: (item: UnifiedMedia) => void;
   onToggleFavorite: (item: UnifiedMedia) => void;
   onDownload: (item: UnifiedMedia) => Promise<void>;
@@ -45,6 +47,7 @@ export function MediaDetailView({
   onBack,
   onPlayInline,
   onStopPlayback,
+  onOpenExternal,
   onPlayTheater,
   onToggleFavorite,
   onDownload,
@@ -86,20 +89,7 @@ export function MediaDetailView({
   const resolvePlayTarget = (): UnifiedMedia | null => {
     if (media.kind !== 'series') return media;
     if (!seriesDetail || seriesDetail.seasons.length === 0) return null;
-    const s = seriesDetail.seasons[0];
-    const ep = seriesDetail.episodesBySeason[s]?.[0];
-    if (!ep) return null;
-    return {
-      ...media,
-      id: `${media.id}-ep-${ep.id}`,
-      xtreamId: Number(ep.id) || media.xtreamId,
-      kind: 'episode',
-      title: `${media.title} · S${s}E${ep.episodeNum} — ${ep.title}`,
-      streamUrl: ep.streamUrl,
-      containerExtension: ep.containerExtension,
-      progressSeconds: ep.progressSeconds,
-      durationSeconds: ep.durationSeconds,
-    };
+    return listEpisodeMedia(seriesDetail)[0] ?? null;
   };
 
   return (
@@ -234,6 +224,7 @@ export function MediaDetailView({
           playlist={playlist}
           onPlayEpisode={(ep, theater) => (theater ? onPlayTheater(ep) : startInlinePlayback(ep))}
           onDownloadEpisode={onDownload}
+          onOpenExternal={onOpenExternal}
         />
       ) : null}
     </div>

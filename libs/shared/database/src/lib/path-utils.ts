@@ -31,7 +31,8 @@ export function getIptvnatorDataRoot(): string {
         return ensureDirectory(dataDir);
     }
 
-    return ensureDirectory(join(homedir(), '.iptvnator'));
+    // TVNest a sa propre base (séparée d'IPTVnator, qui utilise ~/.iptvnator).
+    return ensureDirectory(join(homedir(), '.tvnest'));
 }
 
 export function getIptvnatorDatabaseDirectory(): string {
@@ -39,7 +40,7 @@ export function getIptvnatorDatabaseDirectory(): string {
 }
 
 export function getIptvnatorDatabasePath(): string {
-    return join(getIptvnatorDatabaseDirectory(), 'iptvnator.db');
+    return join(getIptvnatorDatabaseDirectory(), 'tvnest.db');
 }
 
 export function getElectronUserDataPath(): string | null {

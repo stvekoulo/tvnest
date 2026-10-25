@@ -42,6 +42,28 @@ const POSITION_POLL_MS = 500;
 const livePositions = new Map<string, number>();
 const RESUME_END_MARGIN_S = 10;
 
+/** Message mpv brut (« loading failed »…) → explication lisible. */
+export function describeMpvError(raw: string): string {
+  const text = raw.toLowerCase();
+  if (/loading failed|failed to open|http error|connection|timed out|network|403|404|5\d\d/.test(text)) {
+    return 'Le flux ne répond pas : le serveur IPTV refuse la connexion, est saturé ou la chaîne est hors ligne. Réessayez dans un instant.';
+  }
+  if (/unrecognized file format|no video|codec|decod/.test(text)) {
+    return 'Format de flux non pris en charge par le lecteur intégré. Essayez MPV ou VLC.';
+  }
+  return raw;
+}
+
+/** Position atteinte pendant la session (plus récente que celle enregistrée en base). */
+export function getSessionPosition(mediaId: string): number | undefined {
+  return livePositions.get(mediaId);
+}
+
+/** « Recommencer » : la prochaine ouverture repart du début. */
+export function forgetSessionPosition(mediaId: string): void {
+  livePositions.delete(mediaId);
+}
+
 function boundsDiffer(a: Bounds, b: Bounds): boolean {
   return (
     Math.abs(a.x - b.x) > 0.5 ||
@@ -130,6 +152,12 @@ export function useTvNestPlayer({
   const [resolution, setResolution] = useState<string | null>(null);
   const [recordingActive, setRecordingActive] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState<number | null>(null);
+  // « Réessayer » : relance une session neuve sur le même média.
+  const [retryToken, setRetryToken] = useState(0);
+  const retry = useCallback(() => {
+    setError(null);
+    setRetryToken((t) => t + 1);
+  }, []);
 
   const sessionIdRef = useRef<string | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -174,6 +202,9 @@ export function useTvNestPlayer({
     setError(null);
     setBuffering(true);
     setReconnectAttempt(null);
+    // Nouveau média (épisode suivant…) : ne pas garder la position ni la durée du précédent.
+    setPosition(livePositions.get(media.id) ?? media.progressSeconds ?? 0);
+    setDuration(media.durationSeconds || 0);
 
     let unsubMpv: (() => void) | undefined;
     let stopBoundsTracking: (() => void) | undefined;
@@ -241,7 +272,7 @@ export function useTvNestPlayer({
                 setResolution(`${snap.videoWidth}×${snap.videoHeight}`);
               }
               setBuffering(snap.status === 'loading' || snap.status === 'idle');
-              if (snap.status === 'error' && snap.error) setError(snap.error);
+              if (snap.status === 'error' && snap.error) setError(describeMpvError(snap.error));
               else if (snap.status === 'playing') setError(null);
               if (
                 snap.durationSeconds &&
@@ -311,7 +342,8 @@ export function useTvNestPlayer({
       }
 
       if (videoRef.current) {
-        startWebMediaEngine({
+        void startWebMediaEngine({
+          isCancelled: () => cancelled,
           resolved,
           video: videoRef.current,
           playing,
@@ -350,7 +382,7 @@ export function useTvNestPlayer({
         window.electron.setPlaybackKeepAwake(false).catch(() => {});
       }
     };
-  }, [media.id, media.streamUrl, playlist?.id, forcedWeb]);
+  }, [media.id, media.streamUrl, playlist?.id, forcedWeb, retryToken]);
 
   useEffect(() => {
     const sid = sessionIdRef.current;
@@ -409,6 +441,7 @@ export function useTvNestPlayer({
     setResolution,
     recordingActive,
     reconnectAttempt,
+    retry,
     ...controls,
   };
 }

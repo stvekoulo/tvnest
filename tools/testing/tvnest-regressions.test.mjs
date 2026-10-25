@@ -191,3 +191,33 @@ test('catalog filters and reset stay in their section and source', async () => {
         dom.window.close();
     }
 });
+
+test('resume is offered only for a meaningful, unfinished position', async () => {
+    const { shouldOfferResume, formatClock } = await loadSource('apps/web/src/lib/resume-point.ts');
+    assert.equal(shouldOfferResume(0, 3000), false);
+    assert.equal(shouldOfferResume(12, 3000), false, 'a few seconds is not a started viewing');
+    assert.equal(shouldOfferResume(754, 3000), true);
+    assert.equal(shouldOfferResume(754), true, 'unknown duration still offers resume');
+    assert.equal(shouldOfferResume(2950, 3000), false, 'the credits count as watched');
+    assert.equal(shouldOfferResume(2900, 3000), false, 'past 95 % counts as watched');
+    assert.equal(formatClock(754), '12:34');
+    assert.equal(formatClock(4521), '1:15:21');
+});
+
+test('next episode follows episode order and crosses into the next season', async () => {
+    const { listEpisodeMedia, nextEpisodeIn } = await loadSource('apps/web/src/lib/series-episodes.ts');
+    const ep = (id, seasonNum, episodeNum) => ({
+        id, seasonNum, episodeNum, title: `E${episodeNum}`, containerExtension: 'mkv', streamUrl: `u/${id}`,
+    });
+    const detail = {
+        series: { ...item, id: 'show', kind: 'series', title: 'Show' },
+        seasons: [2, 1],
+        episodesBySeason: { 1: [ep('12', 1, 2), ep('11', 1, 1)], 2: [ep('21', 2, 1)] },
+    };
+    const queue = listEpisodeMedia(detail);
+    assert.deepEqual(queue.map((e) => e.id), ['show-ep-11', 'show-ep-12', 'show-ep-21']);
+    assert.equal(nextEpisodeIn(queue, 'show-ep-11').id, 'show-ep-12');
+    assert.equal(nextEpisodeIn(queue, 'show-ep-12').id, 'show-ep-21', 'last of a season goes to the next season');
+    assert.equal(nextEpisodeIn(queue, 'show-ep-21'), null, 'nothing after the last episode');
+    assert.equal(nextEpisodeIn(queue, 'unknown'), null);
+});

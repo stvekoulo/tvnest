@@ -2,6 +2,7 @@ import type { ResolvedPortalPlayback } from '@iptvnator/shared/interfaces';
 import { EmbeddedMpvSessionGoneError } from './embedded-mpv-session-errors';
 import {
     createEmbeddedMpvReconnectState,
+    EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS,
     EMBEDDED_MPV_RECONNECT_MAX_ATTEMPTS,
     EMBEDDED_MPV_RECONNECT_STABLE_PLAYBACK_MS,
     EmbeddedMpvReconnectCoordinator,
@@ -81,17 +82,45 @@ describe('EmbeddedMpvReconnectCoordinator', () => {
         ).toBeNull();
     };
 
-    it('never retries a load that has not played yet', () => {
+    it('retries a load that never played a few times, then shows the error', () => {
         coordinator.onUserLoad(state, LIVE);
         coordinator.observe(SESSION, state, 'loading', null);
+
+        for (
+            let attempt = 1;
+            attempt <= EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS;
+            attempt++
+        ) {
+            expect(
+                coordinator.observe(SESSION, state, 'error', 'loading')
+            ).toEqual(
+                expect.objectContaining({
+                    attempt,
+                    maxAttempts: EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS,
+                })
+            );
+            jest.advanceTimersByTime(30_000);
+            expect(reload).toHaveBeenCalledTimes(attempt);
+            coordinator.observe(SESSION, state, 'loading', 'error');
+        }
 
         expect(
             coordinator.observe(SESSION, state, 'error', 'loading')
         ).toBeNull();
         jest.advanceTimersByTime(120_000);
+        expect(reload).toHaveBeenCalledTimes(EMBEDDED_MPV_FIRST_LOAD_MAX_ATTEMPTS);
+    });
 
+    it('never retries a first load the user paused', () => {
+        coordinator.onUserLoad(state, LIVE);
+        coordinator.observe(SESSION, state, 'loading', null);
+        coordinator.onUserPause(state);
+
+        expect(
+            coordinator.observe(SESSION, state, 'error', 'loading')
+        ).toBeNull();
+        jest.advanceTimersByTime(120_000);
         expect(reload).not.toHaveBeenCalled();
-        expect(state.timer).toBeNull();
     });
 
     it('reloads the last playback after a drop and reports the attempt', () => {

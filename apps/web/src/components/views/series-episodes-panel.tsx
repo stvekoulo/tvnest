@@ -5,7 +5,7 @@ import { MediaArtwork } from '@/components/cards/media-artwork';
 import { Button } from '@/components/motion/button/base';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
-import { launchExternalPlayer } from '@/services/ipc-system.service';
+import { buildEpisodeMedia } from '@/lib/series-episodes';
 import type {
   SeriesDetail,
   SeriesEpisode,
@@ -18,27 +18,7 @@ interface SeriesEpisodesPanelProps {
   playlist?: UnifiedPlaylist | null;
   onPlayEpisode: (epMedia: UnifiedMedia, expandTheater?: boolean) => void;
   onDownloadEpisode: (epMedia: UnifiedMedia) => void;
-}
-
-function buildEpisodeMedia(series: UnifiedMedia, ep: SeriesEpisode): UnifiedMedia {
-  return {
-    id: `${series.id}-ep-${ep.id}`,
-    xtreamId: Number(ep.id) || series.xtreamId,
-    playlistId: series.playlistId,
-    playlistTitle: series.playlistTitle,
-    portalKind: series.portalKind,
-    kind: 'episode',
-    title: `${series.title} · S${ep.seasonNum}E${ep.episodeNum} — ${ep.title}`,
-    category: series.category,
-    posterUrl: ep.posterUrl || series.posterUrl,
-    backdropUrl: ep.posterUrl || series.backdropUrl,
-    streamUrl: ep.streamUrl,
-    containerExtension: ep.containerExtension,
-    duration: ep.duration,
-    plot: ep.plot,
-    progressSeconds: ep.progressSeconds,
-    durationSeconds: ep.durationSeconds,
-  };
+  onOpenExternal: (player: 'mpv' | 'vlc', epMedia: UnifiedMedia) => void;
 }
 
 export function SeriesEpisodesPanel({
@@ -46,6 +26,7 @@ export function SeriesEpisodesPanel({
   playlist,
   onPlayEpisode,
   onDownloadEpisode,
+  onOpenExternal,
 }: SeriesEpisodesPanelProps) {
   const [season, setSeason] = useState<string>(String(detail.seasons[0] ?? 1));
 
@@ -159,7 +140,7 @@ export function SeriesEpisodesPanel({
                               size="icon-sm"
                               variant="secondary"
                               title="Ouvrir dans MPV"
-                              onClick={() => launchExternalPlayer('mpv', epMedia, playlist)}
+                              onClick={() => onOpenExternal('mpv', epMedia)}
                             >
                               <Tv className="size-3.5" />
                             </Button>

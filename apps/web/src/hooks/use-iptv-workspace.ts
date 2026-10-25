@@ -2,6 +2,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCatalogQuery } from '@/hooks/use-catalog-query';
 import { usePlaylistActions } from '@/hooks/use-playlist-actions';
+import { forgetSessionPosition, getSessionPosition } from '@/hooks/use-tvnest-player';
+import { shouldOfferResume } from '@/lib/resume-point';
+import { listEpisodeMedia, nextEpisodeIn } from '@/lib/series-episodes';
 import {
   fetchSavedPlaylists,
   isElectronRuntime,
@@ -13,6 +16,7 @@ import {
 } from '@/services/ipc-series.service';
 import {
   getDownloadsAndRecordings,
+  fetchSavedPlaybackPosition,
   launchExternalPlayer,
   loadPreferences,
   savePreferences,
@@ -27,6 +31,13 @@ import type {
   UnifiedMedia,
   UnifiedPlaylist,
 } from '@/types/iptv.types';
+
+export interface ResumePrompt {
+  item: UnifiedMedia;
+  expand: boolean;
+  positionSeconds: number;
+  durationSeconds?: number;
+}
 
 export function useIptvWorkspace() {
   const [section, setSectionState] = useState<AppSection>('dashboard');
@@ -154,6 +165,69 @@ export function useIptvWorkspace() {
     setSeriesDetail(null);
   }, []);
 
+  // Lecteur externe (MPV / VLC). Le lecteur intégré est arrêté avant : beaucoup de comptes
+  // IPTV n'autorisent qu'une connexion à la fois, et le serveur refuserait celle de MPV.
+  // `positionSeconds` : position atteinte dans le lecteur intégré, reprise par MPV / VLC.
+  const openExternal = useCallback(
+    async (player: 'mpv' | 'vlc', item: UnifiedMedia, positionSeconds?: number) => {
+      setTheaterOpen(false);
+      setIsPlaying(false);
+      setActiveMedia(null);
+      const target =
+        positionSeconds && positionSeconds > 5 && item.kind !== 'live'
+          ? { ...item, progressSeconds: positionSeconds }
+          : item;
+      const label = player.toUpperCase();
+      // Venu du lecteur intégré : laisser le serveur libérer la connexion qu'il vient de fermer.
+      // ponytail: délai fixe ; à remplacer par l'attente de fin de session si 600 ms ne suffisent pas.
+      if (positionSeconds !== undefined) await new Promise((r) => setTimeout(r, 600));
+      try {
+        const session = await launchExternalPlayer(player, target, playlistOf(item));
+        notify(
+          session.status === 'error'
+            ? `${label} n'a pas pu lire le flux : ${session.error ?? 'erreur inconnue'}`
+            : `Ouvert dans ${label}`
+        );
+      } catch (err) {
+        notify(`${label} : ${(err as Error).message}`);
+      }
+    },
+    [playlistOf, notify]
+  );
+
+  const [resumePrompt, setResumePrompt] = useState<ResumePrompt | null>(null);
+
+  // File d'épisodes de la série en cours : source de l'« Épisode suivant » automatique.
+  const [episodeQueue, setEpisodeQueue] = useState<UnifiedMedia[]>([]);
+
+  const startPlayback = useCallback(
+    (item: UnifiedMedia, expandTheater: boolean) => {
+      if (item.kind === 'episode') {
+        const queue = seriesDetail ? listEpisodeMedia(seriesDetail) : [];
+        setEpisodeQueue(queue.some((ep) => ep.id === item.id) ? queue : []);
+      } else {
+        setEpisodeQueue([]);
+      }
+      setActiveMedia(item);
+      setIsPlaying(true);
+      if (expandTheater) setTheaterOpen(true);
+    },
+    [seriesDetail]
+  );
+
+  const nextEpisode = useMemo(
+    () => (activeMedia?.kind === 'episode' ? nextEpisodeIn(episodeQueue, activeMedia.id) : null),
+    [episodeQueue, activeMedia]
+  );
+
+  // Enchaîne l'épisode suivant depuis le début, dans la même vue (Cinéma reste ouvert).
+  const playNextEpisode = useCallback(() => {
+    if (!nextEpisode) return;
+    forgetSessionPosition(nextEpisode.id);
+    setActiveMedia({ ...nextEpisode, progressSeconds: 0 });
+    setIsPlaying(true);
+  }, [nextEpisode]);
+
   const playStream = useCallback(
     async (item: UnifiedMedia, expandTheater = false) => {
       if (item.kind === 'series') {
@@ -161,15 +235,37 @@ export function useIptvWorkspace() {
         return;
       }
       if (prefs.defaultPlayer !== 'builtin' && isElectronRuntime()) {
-        await launchExternalPlayer(prefs.defaultPlayer, item, playlistOf(item));
-        notify(`Ouvert dans ${prefs.defaultPlayer.toUpperCase()}`);
+        await openExternal(prefs.defaultPlayer, item);
         return;
       }
-      setActiveMedia(item);
-      setIsPlaying(true);
-      if (expandTheater) setTheaterOpen(true);
+      // Film ou épisode déjà entamé : on propose « Reprendre » ou « Recommencer ».
+      if (item.kind === 'movie' || item.kind === 'episode') {
+        const saved = await fetchSavedPlaybackPosition(item);
+        const position = getSessionPosition(item.id) ?? saved?.positionSeconds ?? item.progressSeconds ?? 0;
+        const duration = saved?.durationSeconds ?? item.durationSeconds;
+        if (shouldOfferResume(position, duration)) {
+          setResumePrompt({ item, expand: expandTheater, positionSeconds: position, durationSeconds: duration });
+          return;
+        }
+      }
+      startPlayback(item, expandTheater);
     },
-    [playlistOf, prefs.defaultPlayer, notify, openMediaDetail]
+    [prefs.defaultPlayer, openExternal, openMediaDetail, startPlayback]
+  );
+
+  const answerResumePrompt = useCallback(
+    (choice: 'resume' | 'restart' | 'cancel') => {
+      const prompt = resumePrompt;
+      setResumePrompt(null);
+      if (!prompt || choice === 'cancel') return;
+      if (choice === 'restart') {
+        forgetSessionPosition(prompt.item.id);
+        startPlayback({ ...prompt.item, progressSeconds: 0 }, prompt.expand);
+      } else {
+        startPlayback({ ...prompt.item, progressSeconds: prompt.positionSeconds }, prompt.expand);
+      }
+    },
+    [resumePrompt, startPlayback]
   );
 
   const toggleFavorite = useCallback(
@@ -243,6 +339,11 @@ export function useIptvWorkspace() {
     activeMedia,
     isPlaying,
     setIsPlaying,
+    openExternal,
+    resumePrompt,
+    answerResumePrompt,
+    nextEpisode,
+    playNextEpisode,
     stopPlayback: () => {
       setTheaterOpen(false);
       setIsPlaying(false);

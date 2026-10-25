@@ -1,4 +1,5 @@
 // Coque principale TVNest Desktop (Noir Absolu OLED, fiche dédiée plein écran et libmpv).
+import { ResumePromptModal } from '@/components/modals/resume-prompt-modal';
 import { SourceImportModal } from '@/components/modals/source-import-modal';
 import { PlayerHost, requestAppFullscreen } from '@/components/player/player-host';
 import { toggleAppFullscreen } from '@/lib/app-fullscreen';
@@ -6,16 +7,29 @@ import { UnifiedSidebar } from '@/components/shell/unified-sidebar';
 import { WindowTitlebar } from '@/components/shell/window-titlebar';
 import { CatalogWorkspaceView } from '@/components/views/catalog-workspace-view';
 import { DashboardBentoView } from '@/components/views/dashboard-bento-view';
-import { DownloadsView } from '@/components/views/downloads-view';
-import { GlobalSearchView } from '@/components/views/global-search-view';
-import { EpgGuideView } from '@/components/views/epg-guide-view';
 import { MediaDetailView } from '@/components/views/media-detail-view';
-import { PlaylistsManagerView } from '@/components/views/playlists-manager-view';
-import { SettingsView } from '@/components/views/settings-view';
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { useAppUpdate } from '@/hooks/use-app-update';
 import { useIptvWorkspace } from '@/hooks/use-iptv-workspace';
 import { useSourceAutoRefresh } from '@/hooks/use-source-auto-refresh';
+
+
+// Vues secondaires chargées à la demande : démarrage plus léger (Accueil et catalogue d'abord).
+const DownloadsView = lazy(() =>
+  import('@/components/views/downloads-view').then((m) => ({ default: m.DownloadsView }))
+);
+const GlobalSearchView = lazy(() =>
+  import('@/components/views/global-search-view').then((m) => ({ default: m.GlobalSearchView }))
+);
+const EpgGuideView = lazy(() =>
+  import('@/components/views/epg-guide-view').then((m) => ({ default: m.EpgGuideView }))
+);
+const PlaylistsManagerView = lazy(() =>
+  import('@/components/views/playlists-manager-view').then((m) => ({ default: m.PlaylistsManagerView }))
+);
+const SettingsView = lazy(() =>
+  import('@/components/views/settings-view').then((m) => ({ default: m.SettingsView }))
+);
 
 export function App() {
   const ws = useIptvWorkspace();
@@ -63,6 +77,7 @@ export function App() {
             onBack={ws.closeMediaDetail}
             onPlayInline={(item) => ws.playStream(item, false)}
             onStopPlayback={ws.stopPlayback}
+            onOpenExternal={(player, item) => void ws.openExternal(player, item)}
             onPlayTheater={(item) => ws.playStream(item, true)}
             onToggleFavorite={ws.toggleFavorite}
             onDownload={ws.downloadMedia}
@@ -236,6 +251,9 @@ export function App() {
       theaterOpen={ws.theaterOpen}
       onTheaterChange={ws.setTheaterOpen}
       onStop={ws.stopPlayback}
+      onOpenExternal={(player, item, position) => void ws.openExternal(player, item, position)}
+      nextEpisode={ws.nextEpisode}
+      onPlayNext={ws.playNextEpisode}
     >
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <UnifiedSidebar
@@ -274,8 +292,12 @@ export function App() {
           onOpenAddSource={() => ws.setAddSourceOpen(true)}
         />
 
-        <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">{renderSection()}</main>
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
+          <Suspense fallback={null}>{renderSection()}</Suspense>
+        </main>
       </div>
+
+      <ResumePromptModal prompt={ws.resumePrompt} onAnswer={ws.answerResumePrompt} />
 
       <SourceImportModal
         open={ws.addSourceOpen}

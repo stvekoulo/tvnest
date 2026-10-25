@@ -92,6 +92,9 @@ interface PlayerHostProps {
   onTheaterChange: (open: boolean) => void;
   /** Croix du lecteur (Cinéma ou fiche film/série) : arrête la lecture partout. */
   onStop: () => void;
+  onOpenExternal: (player: 'mpv' | 'vlc', item: UnifiedMedia, positionSeconds: number) => void;
+  nextEpisode: UnifiedMedia | null;
+  onPlayNext: () => void;
   children: ReactNode;
 }
 
@@ -103,6 +106,9 @@ export function PlayerHost({
   theaterOpen,
   onTheaterChange,
   onStop,
+  onOpenExternal,
+  nextEpisode,
+  onPlayNext,
   children,
 }: PlayerHostProps) {
   const node = useMemo(() => {
@@ -187,6 +193,9 @@ export function PlayerHost({
               onExpandTheater={theaterOpen ? undefined : openTheater}
               onCloseTheater={theaterOpen ? () => onTheaterChange(false) : undefined}
               onStop={theaterOpen || inlineFull ? onStop : undefined}
+              onOpenExternal={(player, position) => onOpenExternal(player, media, position)}
+              nextEpisode={nextEpisode}
+              onPlayNext={onPlayNext}
             />,
             node
           )

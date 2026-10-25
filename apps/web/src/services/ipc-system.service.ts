@@ -2,6 +2,7 @@
 import { buildMpvLanguageArgs } from '@/lib/i18n';
 import { resolveMediaPlayback } from '@/services/ipc-playback.service';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
+import type { ExternalPlayerSession } from '@iptvnator/shared/interfaces';
 import type {
   AppPreferences,
   ElectronDownloadItem,
@@ -82,7 +83,7 @@ export async function launchExternalPlayer(
   player: 'mpv' | 'vlc',
   item: UnifiedMedia,
   playlist?: UnifiedPlaylist | null
-): Promise<void> {
+): Promise<ExternalPlayerSession> {
   if (!isElectronRuntime()) {
     throw new Error('Lecteur externe disponible uniquement sous TVNest Desktop');
   }
@@ -93,7 +94,7 @@ export async function launchExternalPlayer(
 
   const fn =
     player === 'mpv' ? window.electron.openInMpv : window.electron.openInVlc;
-  await fn(
+  return fn(
     resolved.streamUrl,
     resolved.title,
     resolved.thumbnail || '',
@@ -104,6 +105,19 @@ export async function launchExternalPlayer(
     resolved.startTime,
     resolved.headers
   );
+}
+
+// Position enregistrée en base d'un film ou d'un épisode Xtream (null si inconnue).
+export async function fetchSavedPlaybackPosition(
+  item: UnifiedMedia
+): Promise<{ positionSeconds: number; durationSeconds?: number } | null> {
+  if (!isElectronRuntime() || !item.xtreamId || (item.kind !== 'movie' && item.kind !== 'episode')) {
+    return null;
+  }
+  const saved = await window.electron
+    .dbGetPlaybackPosition(item.playlistId, item.xtreamId, item.kind === 'episode' ? 'episode' : 'vod')
+    .catch(() => null);
+  return saved ? { positionSeconds: saved.positionSeconds, durationSeconds: saved.durationSeconds } : null;
 }
 
 export async function syncEpgUrls(urls: string[]): Promise<void> {

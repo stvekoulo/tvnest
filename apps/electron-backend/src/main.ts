@@ -37,14 +37,21 @@ import { isEmbeddedMpvFeatureEnabled } from './app/services/embedded-mpv-runtime
 import { runEmbeddedMpvRuntimeDiagnosticOrContinue } from './app/services/embedded-mpv-runtime-diagnostic';
 import { acquireSingleInstanceLock } from './app/services/single-instance';
 import {
+    separateTvnestDatabase,
+    separateTvnestProfile,
+} from './app/services/tvnest-data-separation';
+import {
     createPlaylistOpenRequest,
     extractPlaylistOpenRequestsFromArgv,
     playlistOpenRequests,
 } from './app/services/playlist-open-request';
 import { EMBEDDED_MPV_FRAME_COPY, store } from './app/services/store.service';
 
-// Conserve le dossier userData existant (%APPDATA%\iptvnator).
-app.setName('iptvnator');
+// Profil et base propres à TVNest (%APPDATA%\TVNest, ~/.tvnest) ; les données partagées
+// avec IPTVnator jusqu'à la 1.0.2 sont copiées une seule fois, avant toute ouverture.
+app.setName('TVNest');
+separateTvnestProfile(app.getPath('appData'), app.getPath('userData'));
+separateTvnestDatabase();
 
 traceStartupPhase('compile-cache', () => readCompileCacheOutcome());
 countMainProcessSqlStatements(
