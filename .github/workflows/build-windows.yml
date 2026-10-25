@@ -1,0 +1,81 @@
+# Installeur Windows TVNest, construit sur le runner auto-hébergé (machine locale).
+# Un runner auto-hébergé ne consomme aucune minute GitHub Actions.
+#
+# - push sur master / lancement manuel : installeur .exe en artefact du workflow
+# - tag v* (ex. v0.26.0) : installeur publié dans une Release GitHub (mise à jour auto)
+name: Build Windows installer
+
+on:
+    push:
+        branches: [master]
+        tags: ['v*']
+    workflow_dispatch:
+
+concurrency:
+    group: build-windows-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: write
+
+jobs:
+    windows:
+        name: Windows x64 (.exe)
+        runs-on: [self-hosted, Windows, X64]
+        timeout-minutes: 90
+        defaults:
+            run:
+                # Windows PowerShell 5.1 : disponible pour le compte de service du runner.
+                shell: powershell
+        env:
+            NX_DAEMON: 'false'
+            NX_NO_CLOUD: 'true'
+            IPTVNATOR_EMBEDDED_MPV_PLATFORM: win32
+            IPTVNATOR_EMBEDDED_MPV_ARCH: x64
+            IPTVNATOR_REQUIRE_EMBEDDED_MPV: '1'
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+
+            # pnpm local au dépôt (pas d'installation globale sur la machine).
+            - name: Install pnpm
+              run: |
+                  npm install --no-save --prefix .pnpm-cli pnpm@10.33.0
+                  if ($LASTEXITCODE) { exit $LASTEXITCODE }
+                  Add-Content -Path $env:GITHUB_PATH -Value "$PWD\.pnpm-cli\node_modules\.bin" -Encoding ascii
+
+            - name: Install dependencies
+              run: |
+                  pnpm install --frozen-lockfile
+                  if ($LASTEXITCODE) { exit $LASTEXITCODE }
+                  npm ci --prefix apps/web
+
+            - name: Resolve pinned Windows Embedded MPV runtime
+              id: mpv-pin
+              run: node tools/embedded-mpv/windows-runtime-pin.mjs --github-output
+
+            - name: Stage Windows Embedded MPV runtime
+              run: >
+                  pnpm embedded-mpv:stage-runtime:windows-archive --
+                  "${{ steps.mpv-pin.outputs.url }}" "${{ steps.mpv-pin.outputs.sha256 }}"
+
+            - name: Build installer
+              if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+              run: pnpm run make:app -- --publishPolicy=never
+
+            - name: Build and publish release
+              if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: pnpm run make:app -- --publishPolicy=always
+
+            - name: Upload installer
+              uses: actions/upload-artifact@v7
+              with:
+                  name: tvnest-windows-x64
+                  if-no-files-found: error
+                  retention-days: 14
+                  path: |
+                      dist/executables/*.exe
+                      dist/executables/*.blockmap
+                      dist/executables/latest.yml
