@@ -186,7 +186,7 @@ export function DashboardHeroRow({
               </div>
 
               {heroItem.rating && Number(heroItem.rating) > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-black/70 px-2.5 py-1 text-[11px] font-bold text-foreground backdrop-blur-md">
+                <span className="inline-flex items-center gap-1 rounded-full border border-white/30 bg-black/70 px-2.5 py-1 text-[11px] font-bold text-white backdrop-blur-md">
                   <Star className="size-3 fill-current" />
                   {Number(heroItem.rating).toFixed(1)}
                 </span>

@@ -29,6 +29,8 @@ export function loadPreferences(): AppPreferences {
     userAgent: '',
     autoplay: true,
     parentalLockEnabled: false,
+    autoUpdate: true,
+    sourceRefreshDays: 0,
   };
   if (!raw) return defaults;
   try {

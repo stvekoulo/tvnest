@@ -91,18 +91,29 @@ export function useCatalogQuery(
   }, [prefs.autoFilterByLanguage, prefs.preferredContentLanguage]);
 
   // Charge les catégories comptées et les sélections Accueil dès que la playlist change.
-  const reloadOverview = useCallback(async () => {
+  // Les groupes suivent la langue du filtre (celle des Paramètres quand le filtre auto est actif).
+  const languageFilter = filters.language;
+  useEffect(() => {
     if (!activePlaylist) {
       setCategories([]);
+      return;
+    }
+    let cancelled = false;
+    fetchCategoriesWithCounts(activePlaylist, languageFilter)
+      .then((cats) => !cancelled && setCategories(cats))
+      .catch((err) => !cancelled && onError(`Erreur catalogue : ${(err as Error).message}`));
+    return () => {
+      cancelled = true;
+    };
+  }, [activePlaylist, languageFilter, onError]);
+
+  const reloadOverview = useCallback(async () => {
+    if (!activePlaylist) {
       setHighlights(EMPTY_HIGHLIGHTS);
       return;
     }
     try {
-      const [cats, dash] = await Promise.all([
-        fetchCategoriesWithCounts(activePlaylist),
-        fetchDashboardHighlights(activePlaylist, prefs.preferredContentLanguage),
-      ]);
-      setCategories(cats);
+      const dash = await fetchDashboardHighlights(activePlaylist, prefs.preferredContentLanguage);
       setHighlights(dash);
 
       const epgIds = dash.liveChannels

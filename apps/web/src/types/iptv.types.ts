@@ -156,6 +156,10 @@ export interface AppPreferences {
   userAgent: string;
   autoplay: boolean;
   parentalLockEnabled: boolean;
+  /** Vérifie et télécharge automatiquement les nouvelles releases GitHub. */
+  autoUpdate: boolean;
+  /** Actualisation des sources au démarrage : 0 = jamais, sinon tous les N jours (1 à 7). */
+  sourceRefreshDays: number;
 }
 
 export type {

@@ -86,14 +86,30 @@ export interface DashboardHighlightsResult {
 }
 
 // Préfixes et marqueurs courants utilisés par les fournisseurs IPTV par langue.
+// Formes d'étiquette de langue utilisées par les fournisseurs : en préfixe (« FR - », « FR | »,
+// « FR: ») ou n'importe où entre crochets, parenthèses ou barres (« SRS - SPAIN [ES] »).
+function tagPatterns(...codes: string[]): string[] {
+    return codes.flatMap((c) => [
+        `${c} -%`,
+        `${c}-%`,
+        `${c}|%`,
+        `${c} |%`,
+        `${c}:%`,
+        `%[${c}]%`,
+        `%(${c})%`,
+        `%|${c}|%`,
+        `%| ${c} |%`,
+    ]);
+}
+
 export const LANGUAGE_PATTERNS: Record<string, string[]> = {
-    FR: ['FR -%', 'FR|%', 'FR:%', '[FR]%', '|FR|%', '(FR)%', '%|FR|%', '%[FR]%', '%FRENCH%', '%FRANCAIS%', '%VOSTFR%', '%TRUEFRENCH%', '% VF %', '% VFF %'],
-    EN: ['EN -%', 'EN|%', 'UK -%', 'US -%', '[EN]%', '[UK]%', '[US]%', '|EN|%', '|UK|%', '|US|%', '%ENGLISH%'],
-    ES: ['ES -%', 'ES|%', '[ES]%', '|ES|%', '(ES)%', '%ESPANOL%', '%LATINO%', '%CASTELLANO%'],
-    AR: ['AR -%', 'AR|%', '[AR]%', '|AR|%', '(AR)%', '%ARAB%', '%SHAHID%'],
-    DE: ['DE -%', 'DE|%', '[DE]%', '|DE|%', '(DE)%', '%GERMAN%', '%DEUTSCH%'],
-    IT: ['IT -%', 'IT|%', '[IT]%', '|IT|%', '(IT)%', '%ITALIA%'],
-    PT: ['PT -%', 'PT|%', 'BR -%', '[PT]%', '[BR]%', '|PT|%', '|BR|%', '%PORTUG%', '%BRASIL%'],
-    NL: ['NL -%', 'NL|%', '[NL]%', '|NL|%', '%DUTCH%', '%NEDERLAND%'],
-    TR: ['TR -%', 'TR|%', '[TR]%', '|TR|%', '%TURK%'],
+    FR: [...tagPatterns('FR'), '%FRENCH%', '%FRANCAIS%', '%VOSTFR%', '%TRUEFRENCH%', '% VF %', '% VFF %'],
+    EN: [...tagPatterns('EN', 'UK', 'US'), '%ENGLISH%'],
+    ES: [...tagPatterns('ES'), '%ESPANOL%', '%LATINO%', '%CASTELLANO%'],
+    AR: [...tagPatterns('AR'), '%ARAB%', '%SHAHID%'],
+    DE: [...tagPatterns('DE'), '%GERMAN%', '%DEUTSCH%'],
+    IT: [...tagPatterns('IT'), '%ITALIA%'],
+    PT: [...tagPatterns('PT', 'BR'), '%PORTUG%', '%BRASIL%'],
+    NL: [...tagPatterns('NL'), '%DUTCH%', '%NEDERLAND%'],
+    TR: [...tagPatterns('TR'), '%TURK%'],
 };

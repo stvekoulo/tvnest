@@ -210,8 +210,8 @@ export const preloadDatabaseCoreApi: PreloadDatabaseCoreSlice = {
 export const preloadCatalogFilterApi = {
     dbQueryCatalog: (query: CatalogFilterQuery): Promise<CatalogFilterResult> =>
         ipcRenderer.invoke('DB_QUERY_CATALOG', query),
-    dbGetCategoriesWithCounts: (playlistId: string): Promise<CategoryWithCountRow[]> =>
-        ipcRenderer.invoke('DB_GET_CATEGORIES_WITH_COUNTS', playlistId),
+    dbGetCategoriesWithCounts: (playlistId: string, language?: string): Promise<CategoryWithCountRow[]> =>
+        ipcRenderer.invoke('DB_GET_CATEGORIES_WITH_COUNTS', playlistId, language),
     dbGetPlaylistStreamCounts: (): Promise<Record<string, PlaylistStreamCounts>> =>
         ipcRenderer.invoke('DB_GET_PLAYLIST_STREAM_COUNTS'),
     dbGetDashboardHighlights: (

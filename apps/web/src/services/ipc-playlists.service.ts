@@ -153,3 +153,44 @@ export async function removeSavedPlaylist(playlistId: string): Promise<void> {
     JSON.stringify(list.filter((p) => p._id !== playlistId))
   );
 }
+
+// Dernière actualisation automatique réussie de chaque source (horodatage ms, par id).
+const SOURCE_REFRESH_LOG_KEY = 'tvnest.sources.lastRefresh.v1';
+
+function readSourceRefreshLog(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(SOURCE_REFRESH_LOG_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+export function markSourcesRefreshed(ids: string[], at = Date.now()): void {
+  const log = readSourceRefreshLog();
+  for (const id of ids) log[id] = at;
+  localStorage.setItem(SOURCE_REFRESH_LOG_KEY, JSON.stringify(log));
+}
+
+// Date de dernière actualisation : journal local, sinon date de mise à jour ou d'import.
+export async function fetchSourceRefreshTimes(): Promise<Record<string, number>> {
+  if (!isElectronRuntime()) return {};
+  const log = readSourceRefreshLog();
+  const metas: Playlist[] = (await window.electron.dbGetAppPlaylists()) || [];
+  const out: Record<string, number> = {};
+  for (const p of metas) {
+    const fromMeta = Date.parse(String(p.updateDate ?? p.importDate ?? ''));
+    out[p._id] = log[p._id] ?? (Number.isFinite(fromMeta) ? fromMeta : 0);
+  }
+  return out;
+}
+
+// Re-télécharge des playlists M3U (URL ou fichier) depuis leur source ; renvoie les ids réussis.
+export async function refreshM3uPlaylists(ids: string[]): Promise<string[]> {
+  if (!isElectronRuntime() || ids.length === 0) return [];
+  const metas: Playlist[] = (await window.electron.dbGetAppPlaylists()) || [];
+  const targets = metas.filter((p) => ids.includes(p._id) && (p.url || p.filePath));
+  if (targets.length === 0) return [];
+  const res = await window.electron.autoUpdatePlaylists(targets);
+  for (const p of res.playlists) await window.electron.dbUpsertAppPlaylist(p);
+  return res.playlists.map((p) => p._id);
+}

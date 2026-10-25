@@ -21,9 +21,9 @@ ipcMain.handle('DB_QUERY_CATALOG', async (_event, query: CatalogFilterQuery) => 
 
 ipcMain.handle(
     'DB_GET_CATEGORIES_WITH_COUNTS',
-    async (_event, playlistId: string) => {
+    async (_event, playlistId: string, language?: string) => {
         try {
-            return await getCategoriesWithCounts(playlistId);
+            return await getCategoriesWithCounts(playlistId, language);
         } catch (error) {
             console.error(LOG_TAG, 'Error getting categories with counts:', error);
             throw error;

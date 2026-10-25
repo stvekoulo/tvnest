@@ -58,7 +58,7 @@ export function PlayerOsdHeader({
             {resolution ? ` · ${resolution}` : ''}
           </p>
         </div>
-        <span className="hidden rounded-md border border-white/40 bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground sm:inline-block">
+        <span className="hidden rounded-md border border-white/40 bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white sm:inline-block">
           {engine === 'libmpv' ? 'LIBMPV' : engine.toUpperCase()}
         </span>
       </div>

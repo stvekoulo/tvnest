@@ -62,32 +62,34 @@ export async function addXtreamPortal(params: {
   return mapPlaylistToUnified(appMeta);
 }
 
+const XTREAM_SECTIONS = [
+  {
+    catAction: 'get_live_categories',
+    streamAction: 'get_live_streams',
+    dbCatType: 'live',
+    dbStreamType: 'live',
+  },
+  {
+    catAction: 'get_vod_categories',
+    streamAction: 'get_vod_streams',
+    dbCatType: 'movies',
+    dbStreamType: 'movie',
+  },
+  {
+    catAction: 'get_series_categories',
+    streamAction: 'get_series',
+    dbCatType: 'series',
+    dbStreamType: 'series',
+  },
+] as const;
+
 // Synchronise Live, Films VOD et Séries d'un portail Xtream dans SQLite.
 export async function syncXtreamPortalToDb(
   playlistId: string,
   serverUrl: string,
   creds: { username: string; password: string }
 ): Promise<number> {
-  const sections = [
-    {
-      catAction: 'get_live_categories',
-      streamAction: 'get_live_streams',
-      dbCatType: 'live',
-      dbStreamType: 'live',
-    },
-    {
-      catAction: 'get_vod_categories',
-      streamAction: 'get_vod_streams',
-      dbCatType: 'movies',
-      dbStreamType: 'movie',
-    },
-    {
-      catAction: 'get_series_categories',
-      streamAction: 'get_series',
-      dbCatType: 'series',
-      dbStreamType: 'series',
-    },
-  ];
+  const sections = XTREAM_SECTIONS;
 
   let total = 0;
   for (const sec of sections) {
@@ -118,6 +120,42 @@ export async function syncXtreamPortalToDb(
       total += saved.count || streamRes.payload.length;
     }
   }
+  return total;
+}
+
+// Réimporte le catalogue d'un portail Xtream existant en conservant favoris, historique et
+// groupes masqués. `saveContent` ignore une source déjà remplie : il faut vider puis réimporter.
+export async function refreshXtreamPortal(playlist: UnifiedPlaylist): Promise<number> {
+  if (!isElectronRuntime() || !playlist.serverUrl) return 0;
+  const creds = { username: playlist.username || '', password: playlist.password || '' };
+  const request = (action: string) =>
+    window.electron.xtreamRequest({ url: playlist.serverUrl as string, params: { ...creds, action } });
+
+  // 1. Tout télécharger d'abord : en cas d'échec réseau, le catalogue actuel reste intact.
+  const fetched = await Promise.all(
+    XTREAM_SECTIONS.map(async (sec) => {
+      const [catRes, streamRes] = await Promise.all([request(sec.catAction), request(sec.streamAction)]);
+      const categories = 'payload' in catRes && Array.isArray(catRes.payload) ? catRes.payload : null;
+      const streams = 'payload' in streamRes && Array.isArray(streamRes.payload) ? streamRes.payload : null;
+      if (!categories || !streams) throw new Error(`Portail Xtream injoignable (${sec.dbStreamType})`);
+      return { sec, categories, streams };
+    })
+  );
+
+  // 2. Vider l'ancien contenu en récupérant les données de l'utilisateur, puis réimporter.
+  const backup = await window.electron.dbDeleteXtreamContent(playlist.id);
+  if (!backup.success) throw new Error('Impossible de remplacer le catalogue Xtream');
+  let total = 0;
+  for (const { sec, categories, streams } of fetched) {
+    const hidden = backup.hiddenCategories
+      .filter((h) => h.categoryType === sec.dbCatType)
+      .map((h) => h.xtreamId);
+    await window.electron.dbSaveCategories(playlist.id, categories, sec.dbCatType, hidden);
+    const saved = await window.electron.dbSaveContent(playlist.id, streams, sec.dbStreamType);
+    total += saved.count || streams.length;
+  }
+  // 3. Rattacher favoris et historique au nouveau contenu.
+  await window.electron.dbRestoreXtreamUserData(playlist.id, backup.favorites, backup.recentlyViewed);
   return total;
 }
 

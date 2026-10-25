@@ -99,9 +99,14 @@ export function countM3uPayloadStreams(
 
 export function extractM3uCategoriesWithCounts(
     payloadStr: string | null,
-    favoritesStr: string | null
+    favoritesStr: string | null,
+    language?: string
 ): CategoryWithCountRow[] {
-    const rows = extractM3uRowsFromPayload(payloadStr, favoritesStr);
+    const patterns =
+        language && language !== 'ALL' ? LANGUAGE_PATTERNS[language.toUpperCase()] : undefined;
+    const rows = extractM3uRowsFromPayload(payloadStr, favoritesStr).filter(
+        (r) => !patterns || patterns.some((pat) => matchesWildcard(r.category_name, pat))
+    );
     const map = new Map<string, { type: 'live' | 'movie'; count: number }>();
     for (const r of rows) {
         const key = `${r.type}::${r.category_name}`;

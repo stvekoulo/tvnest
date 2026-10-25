@@ -17,7 +17,8 @@ declare module '@iptvnator/shared/interfaces' {
   interface ElectronBridgeApi {
     dbQueryCatalog: (query: CatalogFilterQuery) => Promise<CatalogFilterResult>;
     dbGetCategoriesWithCounts: (
-      playlistId: string
+      playlistId: string,
+      language?: string
     ) => Promise<CategoryWithCountRow[]>;
     dbGetPlaylistStreamCounts: () => Promise<
       Record<string, PlaylistStreamCounts>

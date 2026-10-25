@@ -82,10 +82,12 @@ export function mapDbCatalogRow(
 
 // Charge les catégories SQLite avec leur nombre exact d'éléments par catégorie.
 export async function fetchCategoriesWithCounts(
-  playlist: UnifiedPlaylist
+  playlist: UnifiedPlaylist,
+  /** Ne garde que les groupes de cette langue ('ALL' = tous). */
+  language?: string
 ): Promise<UnifiedCategory[]> {
   if (isElectronRuntime() && window.electron.dbGetCategoriesWithCounts) {
-    const rows = await window.electron.dbGetCategoriesWithCounts(playlist.id);
+    const rows = await window.electron.dbGetCategoriesWithCounts(playlist.id, language);
     return (rows || []).map((c) => ({
       id:
         playlist.kind === 'xtream' ? `${c.type}-${c.id}` : String(c.id),

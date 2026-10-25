@@ -10,6 +10,7 @@ import {
 import {
     buildCatalogOrderBySql,
     buildCatalogWhereSql,
+    buildCategoryLanguageMatchSql,
 } from './catalog-filter-sql';
 import type {
     CatalogFilterQuery,
@@ -100,9 +101,11 @@ export async function queryCatalog(
     };
 }
 
-// Retourne toutes les catégories visibles d'une playlist avec leur nombre réel de flux.
+// Retourne les catégories visibles d'une playlist avec leur nombre réel de flux,
+// limitées aux groupes de la langue demandée (`language`, 'ALL' = toutes).
 export async function getCategoriesWithCounts(
-    playlistId: string
+    playlistId: string,
+    language?: string
 ): Promise<CategoryWithCountRow[]> {
     const db = await getDatabase();
     const plRows = (await db.all(sql`
@@ -115,7 +118,7 @@ export async function getCategoriesWithCounts(
     const pl = plRows[0];
     if (!pl) return [];
     if (pl.type !== 'xtream') {
-        return extractM3uCategoriesWithCounts(pl.payload, pl.favorites);
+        return extractM3uCategoriesWithCounts(pl.payload, pl.favorites, language);
     }
 
     const rows = (await db.all(sql`
@@ -129,6 +132,7 @@ export async function getCategoriesWithCounts(
         FROM categories cat
         LEFT JOIN content c ON c.category_id = cat.id
         WHERE cat.playlist_id = ${playlistId} AND cat.hidden = 0
+            AND ${buildCategoryLanguageMatchSql(language) ?? sql`1 = 1`}
         GROUP BY cat.id
         HAVING COUNT(c.id) > 0
         ORDER BY cat.id ASC

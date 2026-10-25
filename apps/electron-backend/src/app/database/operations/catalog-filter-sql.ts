@@ -18,6 +18,17 @@ export function buildLanguageMatchSql(langCode?: string): SQL | null {
     return sql`(${sql.join(checks, sql` OR `)})`;
 }
 
+// Variante pour la liste des groupes : seule la langue du nom du groupe compte.
+export function buildCategoryLanguageMatchSql(langCode?: string): SQL | null {
+    if (!langCode || langCode === 'ALL') return null;
+    const patterns = LANGUAGE_PATTERNS[langCode.toUpperCase()];
+    if (!patterns || patterns.length === 0) return null;
+    return sql`(${sql.join(
+        patterns.map((pat) => sql`cat.name LIKE ${pat}`),
+        sql` OR `
+    )})`;
+}
+
 function buildQualitySql(quality?: string): SQL | null {
     if (!quality || quality === 'ALL') return null;
     switch (quality) {

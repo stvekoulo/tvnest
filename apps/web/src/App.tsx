@@ -10,10 +10,27 @@ import { EpgGuideView } from '@/components/views/epg-guide-view';
 import { MediaDetailView } from '@/components/views/media-detail-view';
 import { PlaylistsManagerView } from '@/components/views/playlists-manager-view';
 import { SettingsView } from '@/components/views/settings-view';
+import { useEffect, useRef } from 'react';
+import { useAppUpdate } from '@/hooks/use-app-update';
 import { useIptvWorkspace } from '@/hooks/use-iptv-workspace';
+import { useSourceAutoRefresh } from '@/hooks/use-source-auto-refresh';
 
 export function App() {
   const ws = useIptvWorkspace();
+  const appUpdate = useAppUpdate(ws.prefs.autoUpdate, ws.notify);
+  useSourceAutoRefresh({
+    playlists: ws.playlists,
+    days: ws.prefs.sourceRefreshDays,
+    onRefreshed: ws.refreshPlaylists,
+    notify: ws.notify,
+    setSyncLabel: ws.setSyncLabel,
+  });
+  const mainRef = useRef<HTMLElement | null>(null);
+
+  // Chaque rubrique ou fiche s'ouvre en haut de page, pas à la position de la précédente.
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [ws.section, ws.detailMedia?.id]);
   const suppressPreviewPlayer = ws.theaterOpen || Boolean(ws.detailMedia);
 
   const renderSection = () => {
@@ -166,6 +183,7 @@ export function App() {
       case 'settings':
         return (
           <SettingsView
+            appUpdate={appUpdate}
             prefs={ws.prefs}
             onUpdatePrefs={ws.updatePrefs}
             onNotify={ws.notify}
@@ -208,7 +226,7 @@ export function App() {
           onOpenAddSource={() => ws.setAddSourceOpen(true)}
         />
 
-        <main className="min-h-0 flex-1 overflow-y-auto">{renderSection()}</main>
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">{renderSection()}</main>
       </div>
 
       <SourceImportModal

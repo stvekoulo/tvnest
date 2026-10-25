@@ -12,6 +12,8 @@ import {
 import { Switch } from '@/components/motion/switch';
 import { TvNestLogo } from '@/components/shell/tvnest-logo';
 import { SettingsPlayerNetwork } from '@/components/views/settings-player-network';
+import { SettingsUpdateCard } from '@/components/views/settings-update-card';
+import type { AppUpdateState } from '@/hooks/use-app-update';
 import {
   CONTENT_LANGUAGES,
   type ContentLanguageCode,
@@ -23,13 +25,20 @@ import { cn } from '@/lib/utils';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
 import type { AppPreferences } from '@/types/iptv.types';
 
+const SOURCE_REFRESH_OPTIONS = [
+  { value: '0', label: 'Désactivée' },
+  { value: '1', label: 'Tous les jours' },
+  ...[2, 3, 4, 5, 6, 7].map((d) => ({ value: String(d), label: `Tous les ${d} jours` })),
+];
+
 interface SettingsViewProps {
+  appUpdate: AppUpdateState;
   prefs: AppPreferences;
   onUpdatePrefs: (patch: Partial<AppPreferences>) => Promise<void>;
   onNotify: (msg: string) => void;
 }
 
-export function SettingsView({ prefs, onUpdatePrefs, onNotify }: SettingsViewProps) {
+export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: SettingsViewProps) {
   const { theme, setTheme } = useTheme();
   const [mpvPath, setMpvPath] = useState(prefs.mpvPlayerPath);
   const [vlcPath, setVlcPath] = useState(prefs.vlcPlayerPath);
@@ -205,6 +214,40 @@ export function SettingsView({ prefs, onUpdatePrefs, onNotify }: SettingsViewPro
         />
 
         <div className="space-y-4">
+          <SettingsUpdateCard
+            update={appUpdate}
+            autoUpdate={prefs.autoUpdate}
+            onAutoUpdateChange={(v) => {
+              void onUpdatePrefs({ autoUpdate: v });
+              if (v) void appUpdate.check();
+            }}
+          />
+
+          <section className="space-y-3 rounded-[26px] border border-border bg-card p-6">
+            <div>
+              <p className="text-sm font-bold text-foreground">Actualisation des sources</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Au démarrage, re-télécharge en arrière-plan les playlists M3U et portails Xtream
+                dont la dernière actualisation est plus ancienne que l’intervalle choisi.
+              </p>
+            </div>
+            <Select
+              value={String(prefs.sourceRefreshDays)}
+              onValueChange={(v) => onUpdatePrefs({ sourceRefreshDays: Number(v) })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCE_REFRESH_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </section>
+
           <section className="flex items-center justify-between rounded-[26px] border border-border bg-card p-6">
             <div className="flex items-center gap-3">
               <Database className="size-5 text-primary" />

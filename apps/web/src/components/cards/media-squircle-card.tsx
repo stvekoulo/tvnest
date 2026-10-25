@@ -68,7 +68,7 @@ export function MediaSquircleCard({
               Direct
             </span>
           ) : item.rating && Number(item.rating) > 0 ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/75 px-2 py-0.5 text-[10px] font-semibold text-foreground backdrop-blur-md">
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/75 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md">
               <Star className="size-2.5 fill-current" />
               {Number(item.rating).toFixed(1)}
             </span>

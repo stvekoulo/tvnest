@@ -1,6 +1,6 @@
 // Vue catalogue TVNest avec rail de groupes SQLite, filtres multicritères et aperçu Live.
 import { Maximize2, PlusCircle, Radio } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MediaSquircleCard } from '@/components/cards/media-squircle-card';
 import { Button } from '@/components/motion/button/base';
 import { StreamSurface } from '@/components/player/stream-surface';
@@ -81,6 +81,13 @@ export function CatalogWorkspaceView({
       .catch(() => setSchedule([]));
   }, [activeMedia?.tvgId]);
 
+  // Nouvelle liste (groupe, rubrique ou filtres) : on repart du haut, pas de la position
+  // de défilement de la liste précédente.
+  const gridScrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    gridScrollRef.current?.scrollTo({ top: 0 });
+  }, [selectedCategory, title, filters]);
+
   const totalCatCount = categories.reduce((sum, c) => sum + (c.count || 0), 0);
 
   return (
@@ -133,7 +140,7 @@ export function CatalogWorkspaceView({
       ) : null}
 
       {/* Zone centrale : Barre de filtres SQLite + Grille de cartes */}
-      <div className="flex-1 space-y-5 overflow-y-auto p-6">
+      <div ref={gridScrollRef} className="flex-1 space-y-5 overflow-y-auto p-6">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h1 className="font-display text-xl font-extrabold tracking-tight text-foreground">
