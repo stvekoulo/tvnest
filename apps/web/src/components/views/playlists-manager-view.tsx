@@ -68,13 +68,13 @@ export function PlaylistsManagerView({
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-3 py-0.5 text-[11px] font-medium text-primary">
               <Layers className="size-3" />
-              Moteur SQLite Natif TVNest
+              Vos sources
             </span>
             <h1 className="mt-1.5 font-display text-2xl font-extrabold tracking-tight text-foreground">
               Sources & Portails IPTV
             </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {playlists.length} source(s) indexée(s) localement dans votre base SQLite.
+              {playlists.length} source(s) enregistrée(s) sur cet ordinateur.
             </p>
           </div>
         </div>

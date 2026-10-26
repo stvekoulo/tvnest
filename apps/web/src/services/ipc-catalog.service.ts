@@ -133,8 +133,8 @@ export async function fetchDashboardHighlights(
 }
 
 // Barre de progression de l'historique : film = sa position, série = dernier épisode lu.
-async function withSavedProgress(playlistId: string, rows: UnifiedMedia[]): Promise<UnifiedMedia[]> {
-  if (rows.length === 0 || !window.electron.dbGetRecentPlaybackPositions) return rows;
+export async function withSavedProgress(playlistId: string, rows: UnifiedMedia[]): Promise<UnifiedMedia[]> {
+  if (rows.length === 0 || !window.electron?.dbGetRecentPlaybackPositions) return rows;
   const positions = await window.electron.dbGetRecentPlaybackPositions(playlistId, 200).catch(() => []);
   const movies = new Map<number, (typeof positions)[number]>();
   const series = new Map<number, (typeof positions)[number]>();

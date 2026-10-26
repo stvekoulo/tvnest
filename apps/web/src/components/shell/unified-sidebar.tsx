@@ -23,7 +23,8 @@ interface UnifiedSidebarProps {
   section: AppSection;
   onSelectSection: (sec: AppSection) => void;
   collapsed: boolean;
-  onToggleCollapsed: () => void;
+  /** Absent : le menu ne peut pas être déplié (fenêtre trop étroite). */
+  onToggleCollapsed?: () => void;
   uiLanguage: UiLanguage;
   counts: {
     playlists: number;
@@ -69,15 +70,17 @@ export function UnifiedSidebar({
           >
             <TvNestLogo size="sm" />
           </button>
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-label="Déplier le menu"
-            title="Déplier le menu"
-            className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-elevated text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ChevronRight className="size-3.5" />
-          </button>
+          {onToggleCollapsed ? (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label="Déplier le menu"
+              title="Déplier le menu"
+              className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-elevated text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ChevronRight className="size-3.5" />
+            </button>
+          ) : null}
 
           <div className="h-px w-8 bg-border" />
 

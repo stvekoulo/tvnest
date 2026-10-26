@@ -7,6 +7,8 @@ import { UnifiedSidebar } from '@/components/shell/unified-sidebar';
 import { WindowTitlebar } from '@/components/shell/window-titlebar';
 import { CatalogWorkspaceView } from '@/components/views/catalog-workspace-view';
 import { DashboardBentoView } from '@/components/views/dashboard-bento-view';
+import { HistoryView } from '@/components/views/history-view';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { MediaDetailView } from '@/components/views/media-detail-view';
 import { lazy, Suspense, useEffect, useRef } from 'react';
 import { useAppUpdate } from '@/hooks/use-app-update';
@@ -53,6 +55,9 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Fenêtre étroite (tablette, téléphone, fenêtre réduite) : menu en icônes seulement.
+  const narrowWindow = useMediaQuery('(max-width: 1023px)');
 
   // Chaque rubrique s'ouvre en haut de page. Une fiche se pose PAR-DESSUS la liste, qui
   // reste montée : au retour, chaque zone de défilement (grille, groupes, recherche) est intacte.
@@ -127,34 +132,39 @@ export function App() {
           />
         );
 
+      case 'history':
+        return (
+          <HistoryView
+            items={ws.items}
+            epgByChannel={ws.epgByChannel}
+            onPlay={ws.playStream}
+            onOpenDetail={ws.openMediaDetail}
+            onToggleFavorite={ws.toggleFavorite}
+          />
+        );
+
       case 'live':
       case 'movies':
       case 'series':
-      case 'favorites':
-      case 'history': {
+      case 'favorites': {
         const meta = {
           live: {
-            title: 'Télévision en Direct (Live TV)',
+            title: 'Live TV',
             cats: ws.categories.filter((c) => c.type === 'live'),
             isLive: true,
           },
           movies: {
-            title: 'Films VOD',
+            title: 'Films',
             cats: ws.categories.filter((c) => c.type === 'movie'),
             isLive: false,
           },
           series: {
-            title: 'Séries & Saisons',
+            title: 'Séries',
             cats: ws.categories.filter((c) => c.type === 'series'),
             isLive: false,
           },
           favorites: {
-            title: 'Vos Favoris SQLite',
-            cats: [],
-            isLive: false,
-          },
-          history: {
-            title: 'Historique de Lecture',
+            title: 'Favoris',
             cats: [],
             isLive: false,
           },
@@ -164,6 +174,9 @@ export function App() {
           <CatalogWorkspaceView
             title={meta.title}
             isLiveSection={meta.isLive}
+            browseType={
+              ws.section === 'live' ? 'live' : ws.section === 'movies' ? 'movie' : ws.section === 'series' ? 'series' : undefined
+            }
             playlist={ws.activePlaylist}
             items={ws.items}
             totalMatches={ws.totalMatches}
@@ -265,8 +278,8 @@ export function App() {
       <UnifiedSidebar
         section={ws.section}
         onSelectSection={ws.setSection}
-        collapsed={ws.sidebarCollapsed}
-        onToggleCollapsed={() => ws.setSidebarCollapsed((c) => !c)}
+        collapsed={ws.sidebarCollapsed || narrowWindow}
+        onToggleCollapsed={narrowWindow ? undefined : () => ws.setSidebarCollapsed((c) => !c)}
         uiLanguage={ws.prefs.uiLanguage}
         counts={{
           playlists: ws.playlists.length,
@@ -291,7 +304,14 @@ export function App() {
               ws.updateFilters({ search: q }, 'search');
             } else {
               ws.updateFilters({ search: q });
+              // Vidée hors du champ (bouton ×) : la recherche est abandonnée.
+              const typing = document.activeElement instanceof HTMLInputElement;
+              if (ws.section === 'search' && !q.trim() && !typing) ws.setSection('dashboard');
             }
+          }}
+          onSearchBlur={() => {
+            // Recherche lancée depuis l'Accueil puis abandonnée (champ vide) : retour à l'Accueil.
+            if (ws.section === 'search' && !ws.filters.search.trim()) ws.setSection('dashboard');
           }}
           syncLabel={ws.syncLabel}
           uiLanguage={ws.prefs.uiLanguage}

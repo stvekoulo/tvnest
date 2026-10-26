@@ -5,6 +5,7 @@ import {
   fetchCategoriesWithCounts,
   fetchDashboardHighlights,
   queryFilteredCatalog,
+  withSavedProgress,
 } from '@/services/ipc-catalog.service';
 import { isSameWatchItem } from '@/lib/resume-point';
 import {
@@ -125,6 +126,9 @@ export function useCatalogQuery(
     let reloadTimer: number | undefined;
     const onProgress = (e: Event) => {
       const { item, positionSeconds, durationSeconds } = (e as CustomEvent<WatchProgressDetail>).detail;
+      const patch = (r: UnifiedMedia) =>
+        isSameWatchItem(r, item) ? { ...r, progressSeconds: positionSeconds, durationSeconds } : r;
+      setItems((prev) => (prev.some((r) => isSameWatchItem(r, item)) ? prev.map(patch) : prev));
       setHighlights((prev) => {
         const row = prev.continueWatching.find((r) => isSameWatchItem(r, item));
         if (!row) {
@@ -186,8 +190,10 @@ export function useCatalogQuery(
           limit: section === 'epg' ? 240 : PAGE_SIZE,
           offset: 0,
         });
+        // Historique : chaque ligne porte sa barre de progression.
+        const listed = section === 'history' ? await withSavedProgress(activePlaylist.id, res.items) : res.items;
         if (cancelled) return;
-        setItems(res.items);
+        setItems(listed);
         setTotalMatches(res.total);
         setAvailableYears(res.years);
         setQueryTookMs(res.tookMs);

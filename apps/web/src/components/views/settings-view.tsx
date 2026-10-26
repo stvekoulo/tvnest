@@ -85,7 +85,7 @@ export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: Sett
           <TvNestLogo size="lg" />
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-3 py-0.5 text-[11px] font-medium text-primary">
-              TVNest v{appVersion} · libmpv + SQLite
+              TVNest v{appVersion}
             </span>
             <h1 className="mt-1.5 font-display text-2xl font-extrabold tracking-tight text-foreground">
               Paramètres de l’Application
@@ -193,7 +193,7 @@ export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: Sett
                 Filtrer le catalogue par langue par défaut
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Applique automatiquement votre langue préférée dans Live, Films et Séries
+                Applique automatiquement votre langue préférée dans Films et Séries (pas dans Live TV)
               </p>
             </div>
             <Switch
@@ -275,7 +275,7 @@ export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: Sett
             <div className="flex items-center gap-3">
               <Database className="size-5 text-primary" />
               <div>
-                <p className="text-sm font-bold text-foreground">Cache Métadonnées TMDB SQLite</p>
+                <p className="text-sm font-bold text-foreground">Cache des fiches TMDB</p>
                 <p className="text-xs text-muted-foreground">
                   {tmdbCount} fiche(s) mise(s) en cache localement
                 </p>

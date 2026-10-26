@@ -11,6 +11,18 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.15](https://github.com/stvekoulo/tvnest/compare/v1.0.14...v1.0.15) (2026-10-26)
+
+### Features
+
+- **ui** — Live TV, Movies and Series now look like Home: a featured carousel, the active groups panel and one row per group, with the full grid one click away. Filters fit in a compact Filters panel with removable chips, and the menu, title bar and grids adapt to narrow windows, tablets and phones.
+- **ui** — History now looks like Home: a large Resume tile for the latest started title, your recent channels, then Movies, Series and Channels rows where each title shows its progress, updated while you watch.
+
+### Fixes
+
+- **ui** — The default catalog language now filters only movies and series: Live TV keeps every channel. The selected group in the catalog side list no longer shows a colored bar on its left edge.
+- **ui** — Leaving an empty search started from Home, or clearing it with the × button, now returns to Home. TVNest also no longer mentions its internal database (SQLite) in the interface.
+
 # [1.0.14](https://github.com/stvekoulo/tvnest/compare/v1.0.13...v1.0.14) (2026-10-26)
 
 ### Fixes

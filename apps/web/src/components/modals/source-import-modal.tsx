@@ -72,7 +72,7 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
                 Connecter une source IPTV
               </h2>
               <p className="text-xs text-muted-foreground">
-                Indexation directe dans le moteur SQLite natif TVNest.
+                Vos chaînes, films et séries sont importés sur cet ordinateur.
               </p>
             </div>
           </div>
@@ -140,7 +140,7 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
               variant="primary"
               state={btnState}
               disabled={!xtServer.trim() || !xtUser.trim()}
-              loadingText="Synchronisation SQLite..."
+              loadingText="Importation..."
               successText="Portail connecté"
               onClick={() =>
                 exec(() =>

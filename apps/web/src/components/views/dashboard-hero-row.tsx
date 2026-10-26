@@ -40,7 +40,7 @@ export function EmptyOnboardingState({
         <p className="mt-2 max-w-xl text-sm text-muted-foreground">
           Aucune donnée fictive n’est chargée. Connectez une playlist M3U8, un fichier
           local, un serveur Xtream Codes ou un portail Stalker MAC pour alimenter le
-          catalogue SQLite, le guide EPG et le lecteur intégré TVNest Cinema (libmpv).
+          catalogue, le guide des programmes et le lecteur TVNest Cinema.
         </p>
 
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -64,7 +64,7 @@ export function EmptyOnboardingState({
             <Server className="size-5 text-foreground" />
             <span className="text-sm font-bold text-foreground">Xtream & Stalker</span>
             <span className="text-xs text-muted-foreground">
-              Live TV, Films VOD, Séries & Saisons SQLite
+              Live TV, films et séries
             </span>
           </button>
 
@@ -95,6 +95,8 @@ interface DashboardHeroRowProps {
   onToggleFavorite: (item: UnifiedMedia) => void;
   onNavigateSection: (sec: AppSection) => void;
   uiLanguage: UiLanguage;
+  /** Bouton du panneau des groupes (Accueil : ouvrir le catalogue des films). */
+  explore?: { label: string; onClick: () => void };
 }
 
 const HERO_AUTOPLAY_MS = 7000;
@@ -109,6 +111,7 @@ export function DashboardHeroRow({
   onToggleFavorite,
   onNavigateSection,
   uiLanguage,
+  explore,
 }: DashboardHeroRowProps) {
   const reduceMotion = useReducedMotion();
   const [heroIdx, setHeroIdx] = useState(0);
@@ -328,10 +331,10 @@ export function DashboardHeroRow({
 
         <Button
           variant="secondary"
-          onClick={() => onNavigateSection('movies')}
+          onClick={explore?.onClick ?? (() => onNavigateSection('movies'))}
           className="w-full shrink-0 font-bold uppercase tracking-wider"
         >
-          Explorer le catalogue ({totalStreamCount.toLocaleString('fr-FR')})
+          {explore?.label ?? `Explorer le catalogue (${totalStreamCount.toLocaleString('fr-FR')})`}
         </Button>
       </div>
     </div>

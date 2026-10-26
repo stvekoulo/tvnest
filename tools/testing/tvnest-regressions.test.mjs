@@ -130,7 +130,8 @@ test('catalog filters and reset stay in their section and source', async () => {
             '@/services/ipc-catalog.service': `
       export const fetchCategoriesWithCounts = async () => [];
       export const fetchDashboardHighlights = async () => ({spotlight:[],liveChannels:[],recentMovies:[],recentSeries:[],favorites:[],continueWatching:[]});
-      export const queryFilteredCatalog = async () => ({items:[], total:0, years:[], tookMs:0});`,
+      export const queryFilteredCatalog = async () => ({items:[], total:0, years:[], tookMs:0});
+      export const withSavedProgress = async (_id, rows) => rows;`,
             '@/services/ipc-system.service':
                 "export const fetchCurrentEpgForChannels = async () => ({}); export const WATCH_PROGRESS_EVENT = 'tvnest:watch-progress';",
         }
@@ -428,4 +429,36 @@ test('a hanging series request is abandoned, cancelled and resent', async () => 
     window.electron.xtreamRequest = () => new Promise(() => {});
     await assert.rejects(requestXtreamQuick('http://x', {}), /trop de temps/, 'gives up after the last attempt');
     delete globalThis.window;
+});
+
+test('the default catalog language filters movies and series, never Live TV', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const { useCatalogFilters } = await loadSource('apps/web/src/hooks/use-catalog-filters.ts');
+    const prefs = { autoFilterByLanguage: true, preferredContentLanguage: 'FR' };
+    let current;
+    function Harness({ section, language = 'FR' }) {
+        current = useCatalogFilters('source-a', section, { ...prefs, preferredContentLanguage: language });
+        return null;
+    }
+    const root = createRoot(document.getElementById('root'));
+    const render = (props) => act(async () => root.render(React.createElement(Harness, props)));
+    try {
+        await render({ section: 'series' });
+        assert.equal(current.filters.language, 'FR');
+        await act(async () => current.updateFilters({ search: 'news' }, 'live'));
+        await render({ section: 'live' });
+        assert.equal(current.filters.language, 'ALL', 'Live TV keeps every language');
+        assert.equal(current.filters.search, 'news');
+        await render({ section: 'live', language: 'EN' });
+        assert.equal(current.filters.language, 'ALL', 'changing the preferred language leaves Live TV alone');
+        await render({ section: 'series', language: 'EN' });
+        assert.equal(current.filters.language, 'EN');
+    } finally {
+        await act(async () => root.unmount());
+        delete globalThis.window;
+        delete globalThis.document;
+    }
 });

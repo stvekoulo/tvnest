@@ -118,9 +118,9 @@ export function SettingsPlayerNetwork({
 
         <div className="flex items-center justify-between rounded-2xl border border-border bg-elevated px-4 py-3">
           <div>
-            <p className="text-xs font-bold text-foreground">Verrouillage Parental SQLite</p>
+            <p className="text-xs font-bold text-foreground">Contrôle parental</p>
             <p className="text-[11px] text-muted-foreground">
-              Masque les catégories adultes/verrouillées dans SQLite
+              Masque les catégories adultes ou verrouillées
             </p>
           </div>
           <Switch
