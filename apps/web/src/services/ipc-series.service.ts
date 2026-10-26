@@ -1,6 +1,7 @@
 // Service des fiches détaillées Films & Séries Xtream et favoris SQLite.
 import { buildXtreamStreamUrl } from '@/services/ipc-catalog.service';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
+import { requestXtream } from '@/services/xtream-request.service';
 import type {
   SeriesDetail,
   SeriesEpisode,
@@ -162,24 +163,16 @@ export async function fetchXtreamSeriesDetail(
   const loadInfo = async (): Promise<SeriesInfoPayload> => {
     const cached = seriesInfoCache.get(cacheKey);
     if (cached && Date.now() - cached.at < SERIES_INFO_TTL_MS) return cached.payload;
-    const res = await withTimeout(
-      window.electron.xtreamRequest({
-        url: serverUrl,
-        params: {
-          username: playlist.username || '',
-          password: playlist.password || '',
-          action: 'get_series_info',
-          series_id: String(series.xtreamId),
-        },
+    const payload = (await withTimeout(
+      requestXtream(serverUrl, {
+        username: playlist.username || '',
+        password: playlist.password || '',
+        action: 'get_series_info',
+        series_id: String(series.xtreamId),
       }),
       SERIES_INFO_TIMEOUT_MS,
       'Le serveur IPTV met trop de temps à répondre.'
-    );
-    if (!('payload' in res)) {
-      const message = (res as { message?: string }).message;
-      throw new Error(message || 'Le serveur IPTV a refusé la demande.');
-    }
-    const payload = res.payload as SeriesInfoPayload;
+    )) as SeriesInfoPayload;
     seriesInfoCache.set(cacheKey, { at: Date.now(), payload });
     return payload;
   };

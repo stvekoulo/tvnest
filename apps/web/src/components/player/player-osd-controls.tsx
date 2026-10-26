@@ -8,6 +8,7 @@ import {
   Play,
   RotateCcw,
   RotateCw,
+  SkipForward,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -40,6 +41,9 @@ interface PlayerOsdControlsProps {
   visible: boolean;
   playing: boolean;
   onTogglePlay: () => void;
+  /** Épisode suivant de la série, s'il y en a un. */
+  nextEpisodeTitle?: string;
+  onNextEpisode?: () => void;
   engine: PlayerEngineKind;
   resolution: string | null;
   stats?: EmbeddedMpvStreamStats;
@@ -84,6 +88,8 @@ export function PlayerOsdControls(props: PlayerOsdControlsProps) {
     visible,
     playing,
     onTogglePlay,
+    nextEpisodeTitle,
+    onNextEpisode,
     engine,
     position,
     duration,
@@ -206,6 +212,18 @@ export function PlayerOsdControls(props: PlayerOsdControlsProps) {
                     <RotateCw className="size-4" />
                   </button>
                 </>
+              ) : null}
+
+              {onNextEpisode ? (
+                <button
+                  type="button"
+                  onClick={onNextEpisode}
+                  aria-label="Épisode suivant"
+                  title={`Épisode suivant : ${nextEpisodeTitle ?? ''} (N)`}
+                  className="inline-flex size-8 items-center justify-center rounded-full text-zinc-300 hover:bg-white/10 hover:text-white"
+                >
+                  <SkipForward className="size-4" />
+                </button>
               ) : null}
 
               <div className="ml-1 flex items-center gap-2">

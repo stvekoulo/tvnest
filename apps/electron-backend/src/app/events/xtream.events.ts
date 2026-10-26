@@ -61,6 +61,14 @@ function buildXtreamApiUrl(url: string, params: Record<string, string>): URL {
 }
 
 /**
+ * Electron only forwards an Error's message to the renderer: a plain object
+ * rejection arrives as "[object Object]". Keep `type`/`status` for callers.
+ */
+function xtreamRequestError(message: string, status: number): Error {
+    return Object.assign(new Error(message), { type: 'ERROR', status });
+}
+
+/**
  * Handle Xtream Codes API requests
  */
 ipcMain.handle(
@@ -302,15 +310,17 @@ ipcMain.handle(
                         error.message || 'Xtream network request failed'
                     );
                 }
-                const errorResponse = {
-                    type: 'ERROR',
-                    message:
-                        error.response?.data?.message ||
-                        error.message ||
-                        'Failed to fetch data from Xtream server',
-                    status: error.response?.status || 500,
-                };
-                throw errorResponse;
+                const status = error.response?.status;
+                const detail =
+                    error.response?.data?.message ||
+                    error.message ||
+                    'Failed to fetch data from Xtream server';
+                throw xtreamRequestError(
+                    typeof status === 'number'
+                        ? `HTTP Error ${status}: ${detail}`
+                        : detail,
+                    status || 500
+                );
             } else if (
                 error &&
                 typeof error === 'object' &&
@@ -318,11 +328,7 @@ ipcMain.handle(
             ) {
                 throw error;
             } else {
-                throw {
-                    type: 'ERROR',
-                    message: 'An unknown error occurred',
-                    status: 500,
-                };
+                throw xtreamRequestError('An unknown error occurred', 500);
             }
         } finally {
             probeControl.dispose();

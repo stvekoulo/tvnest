@@ -4,6 +4,7 @@ import {
   isElectronRuntime,
   mapPlaylistToUnified,
 } from '@/services/ipc-playlists.service';
+import { checkXtreamAccount, requestXtream } from '@/services/xtream-request.service';
 import type { UnifiedPlaylist } from '@/types/iptv.types';
 
 // Connecte un portail Xtream Codes et synchronise ses catégories et flux dans SQLite.
@@ -24,15 +25,8 @@ export async function addXtreamPortal(params: {
     password: params.password.trim(),
   };
 
-  // Vérification réelle des identifiants sur le serveur Xtream.
-  const authCheck = await window.electron.xtreamRequest({
-    url: cleanServer,
-    params: { ...creds, action: 'get_live_categories' },
-  });
-  if ('type' in authCheck && authCheck.type === 'error') {
-    const errMsg = (authCheck as { message?: string }).message;
-    throw new Error(errMsg || 'Échec de connexion au portail Xtream');
-  }
+  // Vérification réelle du compte (identifiants, abonnement) avant de créer la source.
+  await checkXtreamAccount(cleanServer, creds);
 
   await window.electron.dbCreatePlaylist({
     id,
@@ -128,16 +122,15 @@ export async function syncXtreamPortalToDb(
 export async function refreshXtreamPortal(playlist: UnifiedPlaylist): Promise<number> {
   if (!isElectronRuntime() || !playlist.serverUrl) return 0;
   const creds = { username: playlist.username || '', password: playlist.password || '' };
-  const request = (action: string) =>
-    window.electron.xtreamRequest({ url: playlist.serverUrl as string, params: { ...creds, action } });
+  const request = (action: string) => requestXtream(playlist.serverUrl as string, { ...creds, action });
 
   // 1. Tout télécharger d'abord : en cas d'échec réseau, le catalogue actuel reste intact.
   const fetched = await Promise.all(
     XTREAM_SECTIONS.map(async (sec) => {
-      const [catRes, streamRes] = await Promise.all([request(sec.catAction), request(sec.streamAction)]);
-      const categories = 'payload' in catRes && Array.isArray(catRes.payload) ? catRes.payload : null;
-      const streams = 'payload' in streamRes && Array.isArray(streamRes.payload) ? streamRes.payload : null;
-      if (!categories || !streams) throw new Error(`Portail Xtream injoignable (${sec.dbStreamType})`);
+      const [categories, streams] = await Promise.all([request(sec.catAction), request(sec.streamAction)]);
+      if (!Array.isArray(categories) || !Array.isArray(streams)) {
+        throw new Error(`Réponse incomplète du serveur IPTV (${sec.dbStreamType}).`);
+      }
       return { sec, categories, streams };
     })
   );

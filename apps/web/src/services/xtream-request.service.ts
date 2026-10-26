@@ -1,0 +1,75 @@
+// Appels Xtream Codes : la réponse utile, ou une erreur lisible (jamais « [object Object] »).
+import { readPortalRequestFailure } from '@iptvnator/shared/interfaces';
+
+export function describeXtreamHttpStatus(status: number): string {
+  if (status === 401 || status === 403) {
+    return `Identifiants refusés par le serveur (code ${status}) : vérifiez le nom d'utilisateur et le mot de passe.`;
+  }
+  if (status === 404) return "Ce serveur n'expose pas d'API Xtream (code 404) : vérifiez l'adresse.";
+  // 511/512/513 : réponses de panneaux IPTV qui refusent le compte, pas une panne.
+  if (status >= 511 && status <= 513) {
+    return `Le fournisseur refuse l'accès (code ${status}) : abonnement expiré ou suspendu, nombre maximal de connexions atteint, ou adresse IP non autorisée.`;
+  }
+  if (status >= 500) return `Le serveur IPTV est en panne ou saturé (code ${status}). Réessayez plus tard.`;
+  return `Le serveur IPTV a répondu par une erreur (code ${status}).`;
+}
+
+/** Erreur IPC Electron → explication en français. */
+export function describeXtreamFailure(err: unknown): string {
+  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  const text = raw
+    .replace(/^Error invoking remote method '[^']+':\s*/, '')
+    .replace(/^[A-Za-z]*Error:\s*/, '');
+  const status = /HTTP Error (\d{3})/.exec(text)?.[1];
+  if (status) return describeXtreamHttpStatus(Number(status));
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(text)) {
+    return "Adresse du serveur introuvable : vérifiez l'URL.";
+  }
+  if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT|timeout|socket hang up|stopped answering/i.test(text)) {
+    return "Le serveur IPTV ne répond pas : vérifiez l'adresse et le port, ou réessayez plus tard.";
+  }
+  if (!text || text === '[object Object]') return 'Échec de connexion au serveur IPTV.';
+  return text;
+}
+
+export async function requestXtream(url: string, params: Record<string, string>): Promise<unknown> {
+  let res: unknown;
+  try {
+    res = await window.electron.xtreamRequest({ url, params });
+  } catch (err) {
+    throw new Error(describeXtreamFailure(err));
+  }
+  const failure = readPortalRequestFailure(res);
+  if (failure) {
+    throw new Error(failure.kind === 'http' ? describeXtreamHttpStatus(failure.status) : 'Requête annulée.');
+  }
+  if (!res || typeof res !== 'object' || !('payload' in res)) {
+    throw new Error('Réponse inattendue du serveur IPTV.');
+  }
+  return (res as { payload: unknown }).payload;
+}
+
+interface XtreamUserInfo {
+  auth?: number | string;
+  status?: string;
+  exp_date?: string | number | null;
+}
+
+/** Vérifie le compte avant tout import : identifiants, abonnement expiré ou suspendu. */
+export async function checkXtreamAccount(url: string, creds: { username: string; password: string }): Promise<void> {
+  const payload = (await requestXtream(url, creds)) as { user_info?: XtreamUserInfo } | null;
+  const info = payload?.user_info;
+  if (!info) return; // Certains panneaux ne renvoient pas user_info : l'import le dira.
+  if (Number(info.auth) === 0) {
+    throw new Error("Identifiants incorrects : vérifiez le nom d'utilisateur et le mot de passe.");
+  }
+  const status = (info.status || '').toLowerCase();
+  if (status === 'expired') {
+    const exp = Number(info.exp_date);
+    const date = exp > 0 ? ` le ${new Date(exp * 1000).toLocaleDateString('fr-FR')}` : '';
+    throw new Error(`Abonnement expiré${date} : renouvelez-le auprès de votre fournisseur.`);
+  }
+  if (status === 'banned' || status === 'disabled') {
+    throw new Error('Compte suspendu par le fournisseur.');
+  }
+}

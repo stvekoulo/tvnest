@@ -120,7 +120,7 @@ export function StreamSurface({
   useEffect(() => {
     if (compact) return;
     // Raccourcis : Espace/K lecture, ←/→ ou J/L ±10 s (Maj : ±60 s), ↑/↓ volume ±5,
-    // 0–9 position en %, M muet, F plein écran, Échap fermer.
+    // 0–9 position en %, M muet, F plein écran, N épisode suivant, Échap fermer.
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
@@ -152,6 +152,8 @@ export function StreamSurface({
         player.toggleMute();
       } else if (key === 'f') {
         toggleFullscreen();
+      } else if (key === 'n' && nextEpisode && onPlayNext) {
+        onPlayNext();
       } else if (/^[0-9]$/.test(key) && seekable && player.duration > 0) {
         player.seekTo((Number(key) / 10) * player.duration);
       } else if (key === 'Escape' && onCloseTheater && !document.fullscreenElement) {
@@ -167,7 +169,7 @@ export function StreamSurface({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [compact, media.kind, playing, onPlayingChange, player, toggleFullscreen, onCloseTheater, revealOsd]);
+  }, [compact, media.kind, playing, onPlayingChange, player, toggleFullscreen, onCloseTheater, revealOsd, nextEpisode, onPlayNext]);
 
   const aspectClass =
     player.aspect === '16:9'
@@ -310,6 +312,8 @@ export function StreamSurface({
           visible={nativeDocked || osdVisible || !playing}
           playing={playing}
           onTogglePlay={() => onPlayingChange(!playing)}
+          nextEpisodeTitle={nextEpisode?.title}
+          onNextEpisode={nextEpisode && onPlayNext ? onPlayNext : undefined}
           engine={player.engine}
           resolution={player.resolution}
           stats={player.stats}

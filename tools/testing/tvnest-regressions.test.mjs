@@ -379,3 +379,27 @@ test('MPV / VLC progress is saved with its series and matched on Home', async ()
     assert.equal(isSameWatchItem(movie, { ...movie, playlistId: 'source-b' }), false);
     delete globalThis.window;
 });
+
+test('adding an Xtream source explains refusals instead of "[object Object]"', async () => {
+    const { describeXtreamFailure, checkXtreamAccount, requestXtream } = await loadSource(
+        'apps/web/src/services/xtream-request.service.ts'
+    );
+    const ipc = (msg) => new Error(`Error invoking remote method 'XTREAM_REQUEST': Error: ${msg}`);
+    assert.match(describeXtreamFailure(ipc('HTTP Error 511: Request failed with status code 511')), /refuse l'accès \(code 511\)/);
+    assert.match(describeXtreamFailure(ipc('getaddrinfo ENOTFOUND line.example')), /introuvable/);
+    assert.match(describeXtreamFailure(new Error("Error invoking remote method 'XTREAM_REQUEST': [object Object]")), /Échec de connexion/);
+
+    const respond = (value) => {
+        globalThis.window = { electron: { xtreamRequest: async () => value } };
+    };
+    const creds = { username: 'u', password: 'p' };
+    respond({ portalRequestFailure: { kind: 'http', status: 401 } });
+    await assert.rejects(requestXtream('http://x', creds), /Identifiants refusés/, 'a 401 envelope is not a success');
+    respond({ payload: { user_info: { auth: 0 } } });
+    await assert.rejects(checkXtreamAccount('http://x', creds), /Identifiants incorrects/);
+    respond({ payload: { user_info: { auth: 1, status: 'Expired', exp_date: '1700000000' } } });
+    await assert.rejects(checkXtreamAccount('http://x', creds), /Abonnement expiré le /);
+    respond({ payload: { user_info: { auth: 1, status: 'Active' } } });
+    await checkXtreamAccount('http://x', creds);
+    delete globalThis.window;
+});

@@ -106,8 +106,8 @@ describe('XtreamEvents failed-response performance phases', () => {
                         url: 'http://localhost:3211',
                     }
                 )
-            ).rejects.toEqual({
-                message: 'provider unavailable',
+            ).rejects.toMatchObject({
+                message: 'HTTP Error 503: provider unavailable',
                 status: 503,
                 type: 'ERROR',
             });
