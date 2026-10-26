@@ -169,6 +169,7 @@ export function CatalogWorkspaceView({
                   onPlay={(item) => onPlay(item, !isLiveSection)}
                   onOpenDetail={onOpenDetail}
                   onToggleFavorite={onToggleFavorite}
+                  fixedCardWidth
                 />
               ))}
             </div>

@@ -1,6 +1,19 @@
 // Hook de requêtage réactif SQLite / M3U avec filtres multicritères, pagination et EPG.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCatalogFilters } from './use-catalog-filters';
+import { loadSectionRails } from './use-section-rails';
+import {
+  buildPageRequest,
+  CATALOG_PAGE_FRESH_MS,
+  CATALOG_PAGE_SIZE,
+  clearCachedPages,
+  type CatalogPage,
+  pageKey,
+  prefetchPage,
+  readCachedPage,
+  sectionQueryType,
+  storeCachedPage,
+} from '@/services/catalog-page-cache';
 import {
   fetchCategoriesWithCounts,
   fetchDashboardHighlights,
@@ -23,7 +36,6 @@ import type {
   UnifiedPlaylist,
 } from '@/types/iptv.types';
 
-const PAGE_SIZE = 140;
 
 export interface DashboardHighlightsState {
   spotlight: UnifiedMedia[];
@@ -72,7 +84,10 @@ export function useCatalogQuery(
     filters: scopedFilters,
     updateFilters,
     resetFilters,
+    filtersFor,
   } = useCatalogFilters(activePlaylist?.id ?? '', section, prefs);
+  const filtersForRef = useRef(filtersFor);
+  filtersForRef.current = filtersFor;
   const [items, setItems] = useState<UnifiedMedia[]>([]);
   const [totalMatches, setTotalMatches] = useState<number>(0);
   const [availableYears, setAvailableYears] = useState<string[]>([]);
@@ -120,6 +135,27 @@ export function useCatalogQuery(
     void reloadOverview();
   }, [reloadOverview]);
 
+  // Préchargement, une fois l'Accueil affiché : première page et rangées de Live TV, Films
+  // et Séries, pour qu'aller d'une rubrique à l'autre soit immédiat dès la première fois.
+  useEffect(() => {
+    if (!activePlaylist || categories.length === 0) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      for (const sec of ['live', 'movies', 'series'] as const) {
+        if (cancelled) return;
+        const filters = filtersForRef.current(sec);
+        const type = sectionQueryType(sec) as 'live' | 'movie' | 'series';
+        await prefetchPage(activePlaylist, buildPageRequest(sec, filters, null, prefs.preferredContentLanguage)).catch(() => {});
+        if (cancelled) return;
+        await loadSectionRails(activePlaylist, type, categories.filter((c) => c.type === type), filters).catch(() => []);
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activePlaylist, categories, prefs.preferredContentLanguage]);
+
   // « En cours » en temps réel : chaque sauvegarde de progression remonte le média en tête
   // avec sa nouvelle barre ; un média absent de l'historique recharge l'Accueil.
   useEffect(() => {
@@ -147,12 +183,7 @@ export function useCatalogQuery(
     };
   }, [reloadOverview]);
 
-  const queryType = useMemo<'live' | 'movie' | 'series' | 'all'>(() => {
-    if (section === 'live' || section === 'epg') return 'live';
-    if (section === 'movies') return 'movie';
-    if (section === 'series') return 'series';
-    return 'all';
-  }, [section]);
+  const queryType = sectionQueryType(section);
 
   const selectedCategoryName = useMemo(
     () =>
@@ -165,38 +196,47 @@ export function useCatalogQuery(
     [categories, selectedCategory]
   );
 
-  // Exécute la requête SQLite filtrée avec anti-rebond léger (100 ms).
-  useEffect(() => {
+  const currentPageKey =
+    activePlaylist && section !== 'search'
+      ? pageKey(activePlaylist.id, buildPageRequest(section, scopedFilters, selectedCategoryName, prefs.preferredContentLanguage))
+      : '';
+  const [itemsKey, setItemsKey] = useState('');
+
+  // Première page de la rubrique. Déjà vue (ou préchargée) : affichée tout de suite, puis
+  // rafraîchie en arrière-plan si elle date. Sinon : requête après un court anti-rebond.
+  // Effet de mise en page : la page gardée remplace l'ancienne avant le premier affichage.
+  useLayoutEffect(() => {
     // La page Recherche interroge elle-même toutes les sources.
     if (!activePlaylist || section === 'search') {
       setItems([]);
       setTotalMatches(0);
       return;
     }
+    const request = buildPageRequest(section, scopedFilters, selectedCategoryName, prefs.preferredContentLanguage);
+    const key = pageKey(activePlaylist.id, request);
+    const cached = readCachedPage(key);
+    const apply = (page: CatalogPage) => {
+      setItemsKey(key);
+      setItems(page.items);
+      setTotalMatches(page.total);
+      setAvailableYears(page.years);
+      setQueryTookMs(page.tookMs);
+    };
+    if (cached) apply(cached.page);
+    // L'historique change à chaque lecture : toujours rafraîchi.
+    if (cached && section !== 'history' && Date.now() - cached.at < CATALOG_PAGE_FRESH_MS) return;
+
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      setCatalogLoading(true);
+      if (!cached) setCatalogLoading(true);
       try {
-        const effectiveFilters: CatalogFilterState = {
-          ...scopedFilters,
-          onlyFavorites: section === 'favorites' ? true : scopedFilters.onlyFavorites,
-        };
-        const res = await queryFilteredCatalog(activePlaylist, {
-          type: queryType,
-          categoryName: selectedCategoryName,
-          filters: effectiveFilters,
-          onlyRecent: section === 'history',
-          preferLanguage: prefs.preferredContentLanguage,
-          limit: section === 'epg' ? 240 : PAGE_SIZE,
-          offset: 0,
-        });
+        const res = await queryFilteredCatalog(activePlaylist, request);
         // Historique : chaque ligne porte sa barre de progression.
         const listed = section === 'history' ? await withSavedProgress(activePlaylist.id, res.items) : res.items;
         if (cancelled) return;
-        setItems(listed);
-        setTotalMatches(res.total);
-        setAvailableYears(res.years);
-        setQueryTookMs(res.tookMs);
+        const page = { items: listed, total: res.total, years: res.years, tookMs: res.tookMs };
+        storeCachedPage(key, page);
+        apply(page);
 
         const liveEpgIds = res.items
           .filter((i) => i.kind === 'live' && i.tvgId)
@@ -211,7 +251,7 @@ export function useCatalogQuery(
       } finally {
         if (!cancelled) setCatalogLoading(false);
       }
-    }, 100);
+    }, cached ? 0 : 100);
 
     return () => {
       cancelled = true;
@@ -219,7 +259,6 @@ export function useCatalogQuery(
     };
   }, [
     activePlaylist,
-    queryType,
     selectedCategoryName,
     scopedFilters,
     section,
@@ -241,7 +280,7 @@ export function useCatalogQuery(
         filters: effectiveFilters,
         onlyRecent: section === 'history',
         preferLanguage: prefs.preferredContentLanguage,
-        limit: PAGE_SIZE,
+        limit: CATALOG_PAGE_SIZE,
         offset: items.length,
       });
       setItems((prev) => [...prev, ...res.items]);
@@ -262,6 +301,7 @@ export function useCatalogQuery(
   ]);
 
   const patchMediaFavorite = useCallback((mediaId: string, isFavorite: boolean) => {
+    clearCachedPages();
     const patchList = (list: UnifiedMedia[]) =>
       list.map((m) => (m.id === mediaId ? { ...m, isFavorite } : m));
     setItems(patchList);
@@ -275,6 +315,10 @@ export function useCatalogQuery(
     }));
   }, []);
 
+  // Liste d'une autre rubrique encore en état : la page gardée de la rubrique affichée la
+  // remplace dès ce rendu (jamais un instant de Séries sous le titre Films).
+  const cachedNow = itemsKey !== currentPageKey ? readCachedPage(currentPageKey)?.page : undefined;
+
   return {
     categories,
     highlights,
@@ -283,10 +327,10 @@ export function useCatalogQuery(
     filters: scopedFilters,
     updateFilters,
     resetFilters,
-    items,
-    totalMatches,
-    availableYears,
-    queryTookMs,
+    items: cachedNow?.items ?? items,
+    totalMatches: cachedNow?.total ?? totalMatches,
+    availableYears: cachedNow?.years ?? availableYears,
+    queryTookMs: cachedNow?.tookMs ?? queryTookMs,
     catalogLoading,
     loadMore,
     epgByChannel,

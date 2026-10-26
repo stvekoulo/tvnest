@@ -1,6 +1,5 @@
 // Carte média Squircle TVNest avec affiche résiliente, EPG et ouverture de fiche dédiée.
 import { Heart, Info, Play, Star } from 'lucide-react';
-import { motion } from 'motion/react';
 import { MediaArtwork } from '@/components/cards/media-artwork';
 import { ActionSwapIcon } from '@/components/motion/action-swap';
 import { cn } from '@/lib/utils';
@@ -31,13 +30,12 @@ export function MediaSquircleCard({
       : 0;
 
   return (
-    <motion.div
-      layout="position"
-      whileHover={{ y: -3 }}
-      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+    // Survol en CSS plutôt qu'en composant animé : une grille de 140 cartes se rend bien plus
+    // vite quand on change de rubrique.
+    <div
       onClick={() => (hasDetailPage ? onOpenDetail?.() : onPlay())}
       className={cn(
-        'group relative flex cursor-pointer flex-col overflow-hidden rounded-[22px] border bg-card transition-colors',
+        'group relative flex cursor-pointer flex-col overflow-hidden rounded-[22px] border bg-card transition-[transform,border-color] duration-200 ease-out hover:-translate-y-[3px] motion-reduce:hover:translate-y-0',
         active
           ? 'border-primary/70 ring-1 ring-primary/35'
           : 'border-border hover:border-primary/40'
@@ -145,6 +143,6 @@ export function MediaSquircleCard({
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

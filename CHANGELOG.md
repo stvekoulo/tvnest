@@ -11,6 +11,12 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.16](https://github.com/stvekoulo/tvnest/compare/v1.0.15...v1.0.16) (2026-10-26)
+
+### Fixes
+
+- **ui** — Switching between Live TV, Movies and Series is now instant: each section is kept in memory and preloaded after Home appears. Group rows keep a steady card width, and movie pages no longer show a technical placeholder when there is no synopsis.
+
 # [1.0.15](https://github.com/stvekoulo/tvnest/compare/v1.0.14...v1.0.15) (2026-10-26)
 
 ### Features

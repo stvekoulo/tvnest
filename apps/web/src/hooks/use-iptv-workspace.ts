@@ -1,5 +1,5 @@
 // Hook principal d'orchestration TVNest (sources, recherche SQLite, lecteur et fiche dédiée).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCatalogQuery } from '@/hooks/use-catalog-query';
 import { usePlaylistActions } from '@/hooks/use-playlist-actions';
 import { forgetSessionPosition, getSessionPosition } from '@/hooks/use-tvnest-player';
@@ -84,10 +84,12 @@ export function useIptvWorkspace() {
     setDetailLoading(false);
   }, []);
 
+  // Changement de rubrique en transition : le menu réagit tout de suite, le rendu du
+  // catalogue suit sans bloquer l'interface.
   const setSection = useCallback(
     (next: AppSection) => {
       closeMediaDetail();
-      setSectionState(next);
+      startTransition(() => setSectionState(next));
     },
     [closeMediaDetail]
   );

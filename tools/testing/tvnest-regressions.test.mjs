@@ -462,3 +462,52 @@ test('the default catalog language filters movies and series, never Live TV', as
         delete globalThis.document;
     }
 });
+
+test('switching back to a visited section shows it from cache, without a new query', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.__calls = [];
+    const { useCatalogQuery } = await loadSource('apps/web/src/hooks/use-catalog-query.ts', {
+        '@/services/ipc-catalog.service': `
+      export const fetchCategoriesWithCounts = async () => [];
+      export const fetchDashboardHighlights = async () => ({spotlight:[],liveChannels:[],recentMovies:[],recentSeries:[],favorites:[],continueWatching:[]});
+      export const queryFilteredCatalog = async (_p, req) => {
+        globalThis.__calls.push(req.type);
+        return { items: [{ id: req.type + '-1', kind: req.type, title: req.type }], total: 1, years: [], tookMs: 0 };
+      };
+      export const withSavedProgress = async (_id, rows) => rows;`,
+        '@/services/ipc-system.service':
+            "export const fetchCurrentEpgForChannels = async () => ({}); export const WATCH_PROGRESS_EVENT = 'tvnest:watch-progress';",
+    });
+    const prefs = { autoFilterByLanguage: false, preferredContentLanguage: 'FR' };
+    const onError = (message) => assert.fail(message);
+    const seen = [];
+    function Harness({ section }) {
+        const q = useCatalogQuery(playlist, section, prefs, onError);
+        seen.push([section, q.items[0]?.id]);
+        return null;
+    }
+    const root = createRoot(document.getElementById('root'));
+    const settle = () => new Promise((r) => setTimeout(r, 250));
+    const render = (section) => act(async () => { root.render(React.createElement(Harness, { section })); await settle(); });
+    try {
+        await render('movies');
+        await render('series');
+        const before = globalThis.__calls.filter((t) => t === 'movie').length;
+        seen.length = 0;
+        await render('movies');
+        assert.equal(globalThis.__calls.filter((t) => t === 'movie').length, before, 'no new query for a fresh page');
+        assert.ok(
+            seen.filter(([sec]) => sec === 'movies').every(([, id]) => id !== 'series-1'),
+            'the movies section never shows the series page'
+        );
+        assert.equal(seen.at(-1)[1], 'movie-1');
+    } finally {
+        await act(async () => root.unmount());
+        delete globalThis.window;
+        delete globalThis.document;
+        delete globalThis.__calls;
+    }
+});

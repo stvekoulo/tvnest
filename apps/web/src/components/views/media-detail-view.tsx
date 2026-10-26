@@ -213,10 +213,9 @@ export function MediaDetailView({
 
                 {media.genre ? <p className="text-xs font-medium text-primary">{media.genre}</p> : null}
 
-                <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                  {media.plot ||
-                    'Flux direct prêt à la lecture universelle via TVNest Cinema (libmpv / HLS / MPEG-TS).'}
-                </p>
+                {media.plot ? (
+                  <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">{media.plot}</p>
+                ) : null}
 
                 {media.cast || media.director ? (
                   <div className="grid max-w-3xl grid-cols-1 gap-2 rounded-2xl border border-border bg-elevated p-3.5 text-xs sm:grid-cols-2">

@@ -1,58 +1,101 @@
-# TVNest
+<p align="right"><b>English</b> · <a href="README.fr.md">Français</a></p>
 
-Lecteur IPTV et cinéma pour ordinateur : playlists M3U / M3U8, serveurs Xtream Codes,
-portails Stalker, guide TV XMLTV (EPG) et lecteur intégré basé sur libmpv.
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="TVNest — your IPTV subscription in a fast, cinema-style player for Windows. Supports M3U, Xtream Codes, Stalker and EPG/XMLTV.">
+</p>
 
-TVNest est un projet de **Steven K.**, basé sur [IPTVnator](https://github.com/4gray/iptvnator)
-(licence MIT). La logique d'origine (Electron, base SQLite, lecteur libmpv) est conservée ;
-l'interface a été entièrement refaite en React.
+<p align="center">
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/stvekoulo/tvnest?label=Download%20for%20Windows&style=for-the-badge&color=111111&labelColor=262626" alt="Download the latest TVNest release for Windows"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-111111?style=for-the-badge&labelColor=262626" alt="Windows 10 and 11">
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-111111?style=for-the-badge&labelColor=262626" alt="MIT license"></a>
+</p>
 
-> TVNest est uniquement un **lecteur**. Il ne fournit ni chaînes, ni abonnements, ni playlists.
+**TVNest** turns your IPTV subscription into a desktop app that feels like a streaming service: live TV, movies and series in one dark, fast library, with a built-in player that remembers where you stopped.
 
-## Fonctionnalités
+> TVNest is **only a player**. It does not provide any channels, subscriptions or playlists. Bring your own.
 
-- Sources : playlist M3U par URL, fichier ou texte, Xtream Codes, portail Stalker
-- Catalogue Live TV, films et séries, avec filtres (langue, qualité, note, groupe)
-- Guide TV XMLTV : programme en cours, grille par jour, logos et vignettes
-- Lecteur intégré libmpv : pistes audio et sous-titres, vitesse, format, enregistrement du direct,
-  raccourcis clavier ; lecteurs externes MPV et VLC
-- Favoris, historique et reprise de lecture
+<p align="center">
+  <img src="./assets/readme/screen-movies.webp" width="100%" alt="TVNest Movies page: featured carousel, active groups panel and one row per group">
+</p>
 
-## Installation
+<table>
+  <tr>
+    <td width="33%"><img src="./assets/readme/screen-home.webp" alt="Home: featured title, groups, resume tile and rows"></td>
+    <td width="33%"><img src="./assets/readme/screen-live.webp" alt="Live TV: channels sorted by group with a LIVE badge"></td>
+    <td width="33%"><img src="./assets/readme/screen-movie-detail.webp" alt="Movie page with play, cinema mode and favorite buttons"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Home</sub></td>
+    <td align="center"><sub>Live TV</sub></td>
+    <td align="center"><sub>Movie page</sub></td>
+  </tr>
+</table>
 
-Téléchargez l'installeur Windows (`tvnest-<version>-windows-x64-setup.exe`) depuis la page
-[Releases](../../releases).
+<sub>Screenshots use fictional sample content.</sub>
 
-## Développement
+## What you get
 
-Prérequis : Node.js, Visual Studio Build Tools (module natif libmpv) et pnpm 10.
+- **All your sources in one place** — M3U / M3U8 links or files, Xtream Codes accounts, Stalker portals and XMLTV guides.
+- **A library that feels like streaming** — featured titles, one row per group, quick filters (language, quality, rating, year) and a global search across sources.
+- **A player built for watching** — embedded mpv with audio and subtitle tracks, speed and aspect controls, live recording, keyboard shortcuts, and MPV or VLC if you prefer.
+- **Pick up where you left off** — resume or restart any movie or episode, automatic next episode, history and favorites.
+- **Live TV with a guide** — what's on now and next, and a day-by-day programme grid.
+- **Made for the desktop** — pure black theme, responsive layout, automatic updates.
+
+## How it works
+
+<p align="center">
+  <img src="./assets/readme/how-it-works.svg" width="100%" alt="1. Add your provider (M3U, Xtream Codes, Stalker, XMLTV). 2. TVNest builds one library on your PC. 3. Watch in the built-in player, or in MPV or VLC.">
+</p>
+
+Your catalog is imported into a local database on your PC, so browsing stays instant even with more than 100,000 titles. Your sources and credentials stay on your PC.
+
+## Get started
+
+1. Download `tvnest-<version>-windows-x64-setup.exe` from the [latest release](../../releases/latest) and install it.
+2. Open TVNest and click **Source IPTV**.
+3. Choose **Xtream**, **M3U URL**, **Fichier** (file), **Texte** (paste) or **Stalker**, then enter the details from your provider.
+4. Browse Live TV, Movies and Series, and press play.
+
+TVNest checks GitHub for new versions and updates itself.
+
+**Good to know**
+
+- Windows 10 and 11 (x64) only for now.
+- The interface is in French. English and Spanish are partially translated.
+- If your provider refuses the connection, TVNest tells you why (wrong credentials, expired subscription, too many connections…).
+
+## Build from source
+
+Requirements: Node.js (see `.nvmrc`), pnpm 10 and Visual Studio Build Tools (for the native mpv module).
 
 ```bash
 pnpm install --frozen-lockfile
 npm ci --prefix apps/web
-pnpm run serve:frontend   # interface React (Vite) sur http://localhost:4200
-pnpm run serve:backend    # application Electron
+pnpm run serve:frontend   # React interface (Vite) on http://localhost:4200
+pnpm run serve:backend    # Electron app
 ```
 
-Générer l'installeur Windows en local :
+Build the Windows installer locally:
 
 ```bash
 pnpm run make:app -- --publishPolicy=never
 ```
 
-L'installeur est écrit dans `dist/executables/`.
+The installer is written to `dist/executables/`.
 
-## Intégration continue
+<details>
+<summary>Continuous integration</summary>
 
-Le workflow [`build-windows.yml`](.github/workflows/build-windows.yml) tourne sur un runner
-GitHub Actions auto-hébergé (Windows x64) :
+The [`build-windows.yml`](.github/workflows/build-windows.yml) workflow runs on a self-hosted Windows x64 runner:
 
-- push sur `master` ou lancement manuel : installeur copié sur la machine du runner, dans le dossier
-  `TVNEST_INSTALLERS_DIR` défini dans le fichier `.env` du runner ;
-- tag `v*` (par exemple `v0.26.0`) : installeur publié dans une Release GitHub, utilisée par la
-  mise à jour automatique.
+- push to `master` or manual run: the installer is copied on the runner machine, into the `TVNEST_INSTALLERS_DIR` folder set in the runner's `.env` file;
+- `v*` tag: the installer is published in a GitHub Release, which the automatic updater uses.
 
-## Licence
+</details>
 
-[MIT](LICENSE.md). Le nom et le logo « IPTVnator » appartiennent à leur auteur et ne sont pas
-utilisés comme identité de ce projet (voir [TRADEMARK.md](TRADEMARK.md)).
+## Credits and license
+
+TVNest is made by **Steven K.** It is based on [IPTVnator](https://github.com/4gray/iptvnator) by 4gray (MIT license): the original Electron backend, database and mpv player are kept, and the interface has been rebuilt in React.
+
+[MIT](LICENSE.md). The name and logo "IPTVnator" belong to their author and are not used as this project's identity (see [TRADEMARK.md](TRADEMARK.md)).

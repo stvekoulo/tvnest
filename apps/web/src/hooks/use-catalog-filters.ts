@@ -74,5 +74,11 @@ export function useCatalogFilters(playlistId: string, section: AppSection, prefs
     });
   }, [playlistId, section]);
 
-  return { filters, updateFilters, resetFilters };
+  /** Filtres d'une autre rubrique (préchargement) : les siens s'ils ont été modifiés. */
+  const filtersFor = useCallback(
+    (target: AppSection) => filtersByScope[`${playlistId}|${target}`] ?? defaultsFor(target),
+    [filtersByScope, playlistId, defaultsFor]
+  );
+
+  return { filters, updateFilters, resetFilters, filtersFor };
 }

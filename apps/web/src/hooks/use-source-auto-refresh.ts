@@ -1,5 +1,7 @@
 // Actualisation des sources en arrière-plan au démarrage, tous les N jours (Paramètres).
 import { useEffect, useRef } from 'react';
+import { clearCachedRails } from '@/hooks/use-section-rails';
+import { clearCachedPages } from '@/services/catalog-page-cache';
 import { refreshXtreamPortal } from '@/services/ipc-portals.service';
 import {
   fetchSourceRefreshTimes,
@@ -66,7 +68,11 @@ export function useSourceAutoRefresh({
       }
 
       markSourcesRefreshed(done);
-      if (done.length > 0) await onRefreshed();
+      if (done.length > 0) {
+        clearCachedPages();
+        clearCachedRails();
+        await onRefreshed();
+      }
       const failed = due.length - done.length;
       notify(
         failed > 0
