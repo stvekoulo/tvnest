@@ -6,8 +6,12 @@ export function describeXtreamHttpStatus(status: number): string {
     return `Identifiants refusés par le serveur (code ${status}) : vérifiez le nom d'utilisateur et le mot de passe.`;
   }
   if (status === 404) return "Ce serveur n'expose pas d'API Xtream (code 404) : vérifiez l'adresse.";
-  // 511/512/513 : réponses de panneaux IPTV qui refusent le compte, pas une panne.
-  if (status >= 511 && status <= 513) {
+  // Panneaux IPTV derrière Cloudflare (constaté) : 511 sans identifiants, 512 pour un
+  // couple utilisateur / mot de passe inconnu — exactement comme des identifiants inventés.
+  if (status === 512) {
+    return "Le fournisseur ne reconnaît pas ce compte (code 512) : nom d'utilisateur ou mot de passe incorrect, ou compte pas encore activé. Recopiez-les depuis le message de votre fournisseur.";
+  }
+  if (status === 511 || status === 513) {
     return `Le fournisseur refuse l'accès (code ${status}) : abonnement expiré ou suspendu, nombre maximal de connexions atteint, ou adresse IP non autorisée.`;
   }
   if (status >= 500) return `Le serveur IPTV est en panne ou saturé (code ${status}). Réessayez plus tard.`;

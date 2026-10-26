@@ -387,6 +387,7 @@ test('adding an Xtream source explains refusals instead of "[object Object]"', a
     const ipc = (msg) => new Error(`Error invoking remote method 'XTREAM_REQUEST': Error: ${msg}`);
     assert.match(describeXtreamFailure(ipc('HTTP Error 511: Request failed with status code 511')), /refuse l'accès \(code 511\)/);
     assert.match(describeXtreamFailure(ipc('getaddrinfo ENOTFOUND line.example')), /introuvable/);
+    assert.match(describeXtreamFailure(ipc('HTTP Error 512: Request failed with status code 512')), /ne reconnaît pas ce compte/);
     assert.match(describeXtreamFailure(new Error("Error invoking remote method 'XTREAM_REQUEST': [object Object]")), /Échec de connexion/);
 
     const respond = (value) => {

@@ -11,6 +11,12 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.11](https://github.com/stvekoulo/tvnest/compare/v1.0.10...v1.0.11) (2026-10-26)
+
+### Fixes
+
+- **xtream** — When a provider rejects an unknown username or password with code 512, TVNest now says so instead of suggesting an expired subscription, and Xtream addresses are normalized like IPTVnator (for example http://host:80 becomes http://host).
+
 # [1.0.10](https://github.com/stvekoulo/tvnest/compare/v1.0.9...v1.0.10) (2026-10-26)
 
 ### Features

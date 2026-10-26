@@ -1,5 +1,5 @@
 // Service dédié aux portails Xtream Codes et Stalker (MAC) via IPC Electron et SQLite.
-import type { Playlist } from '@iptvnator/shared/interfaces';
+import { normalizeXtreamServerUrl, type Playlist } from '@iptvnator/shared/interfaces';
 import {
   isElectronRuntime,
   mapPlaylistToUnified,
@@ -19,7 +19,13 @@ export async function addXtreamPortal(params: {
   }
 
   const id = crypto.randomUUID();
-  const cleanServer = params.serverUrl.trim().replace(/\/$/, '');
+  // Même adresse qu'IPTVnator : `http://hote:80/player_api.php` → `http://hote`.
+  let cleanServer: string;
+  try {
+    cleanServer = normalizeXtreamServerUrl(params.serverUrl);
+  } catch {
+    throw new Error("Adresse du serveur invalide : saisissez-la sous la forme http://serveur:port.");
+  }
   const creds = {
     username: params.username.trim(),
     password: params.password.trim(),
