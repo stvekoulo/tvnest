@@ -19,7 +19,9 @@ export function shouldOfferResume(positionSeconds: number, durationSeconds?: num
 export function isSameWatchItem(row: UnifiedMedia, played: UnifiedMedia): boolean {
   if (row.playlistId !== played.playlistId) return false;
   if (row.id === played.id) return true;
-  return row.kind === 'series' && played.kind === 'episode' && row.xtreamId === played.seriesXtreamId;
+  if (!row.xtreamId) return false;
+  if (row.kind === 'series') return played.kind === 'episode' && row.xtreamId === played.seriesXtreamId;
+  return row.kind === played.kind && row.xtreamId === played.xtreamId;
 }
 
 /** 754 → « 12:34 », 4521 → « 1:15:21 ». */

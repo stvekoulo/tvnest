@@ -150,6 +150,9 @@ export async function resolveMediaPlayback(
           playlistId: activeItem.playlistId,
           contentXtreamId: activeItem.xtreamId,
           contentType: activeItem.kind === 'episode' ? 'episode' : 'vod',
+          seriesXtreamId: activeItem.seriesXtreamId,
+          seasonNumber: activeItem.seasonNumber,
+          episodeNumber: activeItem.episodeNumber,
         }
       : undefined;
 

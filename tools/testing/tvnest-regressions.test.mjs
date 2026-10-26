@@ -289,3 +289,93 @@ test('watch progress: no startup overwrite, throttled saves, seeks and flush, ep
     assert.equal(saved.at(-1).positionSeconds, 122, 'the last position is written when playback stops');
     delete globalThis.window;
 });
+
+test('switching to the next episode starts it from zero, not at the previous end', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.MutationObserver = dom.window.MutationObserver;
+    globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+    globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const { useTvNestPlayer, getSessionPosition } = await loadSource('apps/web/src/hooks/use-tvnest-player.ts', {
+        '@/services/ipc-playback.service': `
+      export const probeEmbeddedMpvSupport = async () => ({ supported: false });
+      export const resolveMediaPlayback = async () => ({ streamUrl: '' });`,
+        '@/services/ipc-playlists.service': 'export const isElectronRuntime = () => false;',
+        '@/services/ipc-system.service':
+            'export const recordMediaWatchProgress = () => {}; export const flushMediaWatchProgress = () => {};',
+        './use-tvnest-mpv-controls': 'export const toMpvVolume = (v) => v; export const useTvNestPlayerControls = () => ({});',
+        './use-tvnest-web-engine': 'export const destroyWebEngines = () => {}; export const startWebMediaEngine = async () => {};',
+    });
+    const ep = (n) => ({ ...item, id: `show-ep-${n}`, kind: 'episode', xtreamId: n, progressSeconds: 0 });
+    let current;
+    function Harness({ media }) {
+        current = useTvNestPlayer({
+            media, playing: true, onPlayingChange: () => {},
+            hostRef: { current: null }, videoRef: { current: null },
+        });
+        return null;
+    }
+    const root = createRoot(document.getElementById('root'));
+    const render = (media) => act(async () => root.render(React.createElement(Harness, { media })));
+    try {
+        await render(ep(1));
+        await act(async () => {
+            current.setDuration(2070);
+            current.setPosition(2050); // 34:10 on a 34:30 episode
+        });
+        await render(ep(2));
+        assert.equal(current.position, 0, 'the next episode does not inherit the previous position');
+        assert.equal(getSessionPosition('show-ep-2'), undefined, 'no resume point is invented for it');
+    } finally {
+        await act(async () => root.unmount());
+        delete globalThis.window;
+        delete globalThis.document;
+        delete globalThis.MutationObserver;
+        delete globalThis.requestAnimationFrame;
+        delete globalThis.cancelAnimationFrame;
+    }
+});
+
+test('series "Play" starts after the last finished episode', async () => {
+    const { nextUnwatchedEpisode } = await loadSource('apps/web/src/lib/series-episodes.ts');
+    const ep = (id, episodeNum, progressSeconds) => ({
+        id, seasonNum: 1, episodeNum, title: `E${episodeNum}`, containerExtension: 'mkv',
+        streamUrl: `u/${id}`, progressSeconds, durationSeconds: 1500,
+    });
+    const detail = (eps) => ({ series: { ...item, id: 'show', kind: 'series', title: 'Show' }, seasons: [1], episodesBySeason: { 1: eps } });
+    const none = () => undefined;
+    assert.equal(nextUnwatchedEpisode(detail([ep('1', 1, 0), ep('2', 2, 0)]), none).id, 'show-ep-1');
+    assert.equal(nextUnwatchedEpisode(detail([ep('1', 1, 1490), ep('2', 2, 1480), ep('3', 3, 0)]), none).id, 'show-ep-3');
+    assert.equal(nextUnwatchedEpisode(detail([ep('1', 1, 1490), ep('2', 2, 1490)]), none).id, 'show-ep-1', 'all watched: back to the first');
+});
+
+test('MPV / VLC progress is saved with its series and matched on Home', async () => {
+    const { saveExternalPlaybackProgress } = await loadSource('apps/web/src/services/ipc-system.service.ts', {
+        '@/services/ipc-playlists.service': 'export const isElectronRuntime = () => true;',
+        '@/services/ipc-playback.service': 'export const resolveMediaPlayback = async () => ({});',
+        '@/lib/i18n': 'export const buildMpvLanguageArgs = () => [];',
+    });
+    const { isSameWatchItem } = await loadSource('apps/web/src/lib/resume-point.ts');
+    const saved = [];
+    const events = [];
+    globalThis.window = {
+        electron: { dbSavePlaybackPosition: async (playlistId, data) => saved.push({ playlistId, ...data }) },
+        dispatchEvent: (e) => events.push(e.detail),
+    };
+    const update = { playlistId: 'source-a', contentXtreamId: 7, contentType: 'episode', seriesXtreamId: 70, durationSeconds: 1500 };
+    saveExternalPlaybackProgress({ ...update, positionSeconds: 0 });
+    saveExternalPlaybackProgress({ ...update, durationSeconds: null, positionSeconds: 400 });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(saved.length, 0, 'no write before the player reached the resume point, nor without a duration');
+    saveExternalPlaybackProgress({ ...update, positionSeconds: 400 });
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(saved.map((s) => [s.playlistId, s.contentXtreamId, s.seriesXtreamId, s.positionSeconds]), [['source-a', 7, 70, 400]]);
+    const series = { ...item, id: 'source-a-series-70', kind: 'series', xtreamId: 70, playlistId: 'source-a' };
+    const movie = { ...item, id: 'source-a-movie-12', kind: 'movie', xtreamId: 12, playlistId: 'source-a' };
+    assert.equal(isSameWatchItem(series, events[0].item), true, 'the Home row of the series gets the new progress');
+    assert.equal(isSameWatchItem(movie, { ...movie, id: 'other-id' }), true, 'movies match by provider id');
+    assert.equal(isSameWatchItem(movie, { ...movie, playlistId: 'source-b' }), false);
+    delete globalThis.window;
+});

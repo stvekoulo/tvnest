@@ -18,11 +18,13 @@ export const NEXT_EPISODE_COUNTDOWN_SECONDS = 5;
 
 interface NextEpisodeCardProps {
   next: UnifiedMedia;
+  /** Lecture en pause : le décompte s'arrête aussi. */
+  paused: boolean;
   onPlayNext: () => void;
   onDismiss: () => void;
 }
 
-export function NextEpisodeCard({ next, onPlayNext, onDismiss }: NextEpisodeCardProps) {
+export function NextEpisodeCard({ next, paused, onPlayNext, onDismiss }: NextEpisodeCardProps) {
   const [remaining, setRemaining] = useState(NEXT_EPISODE_COUNTDOWN_SECONDS);
 
   useEffect(() => {
@@ -30,9 +32,10 @@ export function NextEpisodeCard({ next, onPlayNext, onDismiss }: NextEpisodeCard
       onPlayNext();
       return;
     }
+    if (paused) return;
     const timer = window.setTimeout(() => setRemaining((r) => r - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [remaining, onPlayNext]);
+  }, [remaining, paused, onPlayNext]);
 
   const elapsedPct = ((NEXT_EPISODE_COUNTDOWN_SECONDS - remaining) / NEXT_EPISODE_COUNTDOWN_SECONDS) * 100;
 

@@ -2,7 +2,7 @@
 import { buildMpvLanguageArgs } from '@/lib/i18n';
 import { resolveMediaPlayback } from '@/services/ipc-playback.service';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
-import type { ExternalPlayerSession } from '@iptvnator/shared/interfaces';
+import type { ExternalPlayerSession, PlaybackPositionData } from '@iptvnator/shared/interfaces';
 import type {
   AppPreferences,
   ElectronDownloadItem,
@@ -92,6 +92,11 @@ export async function launchExternalPlayer(
     throw new Error('URL de flux introuvable pour ce média');
   }
 
+  // Lancé dans MPV / VLC : le média (ou sa série) entre aussi dans l'historique « En cours ».
+  const contentId = item.dbContentId ?? item.seriesContentId;
+  if (contentId) {
+    window.electron.dbAddRecentItem(contentId, item.playlistId, item.backdropUrl).catch(() => {});
+  }
   const fn =
     player === 'mpv' ? window.electron.openInMpv : window.electron.openInVlc;
   return fn(
@@ -261,6 +266,26 @@ export function recordMediaWatchProgress(
   session.savedAt = positionSeconds;
   session.pending = null;
   writeWatchProgress(detail);
+}
+
+/** Position remontée par MPV / VLC (toutes les 5 s) : enregistrée comme celle du lecteur intégré. */
+export function saveExternalPlaybackProgress(update: PlaybackPositionData): void {
+  const { playlistId, contentXtreamId, contentType, positionSeconds, durationSeconds } = update;
+  // Avant 5 s, le lecteur n'a peut-être pas encore rejoint le point de reprise.
+  if (!playlistId || !contentXtreamId || !(positionSeconds >= 5) || !durationSeconds) return;
+  const item: UnifiedMedia = {
+    id: `${playlistId}-${contentType}-${contentXtreamId}`,
+    playlistId,
+    portalKind: 'xtream',
+    kind: contentType === 'episode' ? 'episode' : 'movie',
+    xtreamId: contentXtreamId,
+    seriesXtreamId: update.seriesXtreamId,
+    seasonNumber: update.seasonNumber,
+    episodeNumber: update.episodeNumber,
+    title: '',
+    category: '',
+  };
+  writeWatchProgress({ item, positionSeconds, durationSeconds });
 }
 
 /** Écrit la dernière position non sauvegardée ; `end` clôt la séance (pause exclue). */

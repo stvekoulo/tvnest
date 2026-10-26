@@ -129,6 +129,14 @@ export function useTvNestPlayer({
     () => livePositions.get(media.id) ?? media.progressSeconds ?? 0
   );
   const [duration, setDuration] = useState(media.durationSeconds || 0);
+  // Nouveau média (épisode suivant…) : position et durée repartent AVANT tout effet, sinon
+  // l'épisode suivant hériterait de la fin du précédent comme point de reprise.
+  const [positionOf, setPositionOf] = useState(media.id);
+  if (positionOf !== media.id) {
+    setPositionOf(media.id);
+    setPosition(livePositions.get(media.id) ?? media.progressSeconds ?? 0);
+    setDuration(media.durationSeconds || 0);
+  }
 
   // Progression en base (moteur libmpv comme moteur Web) : voir recordMediaWatchProgress.
   useEffect(() => {
@@ -211,7 +219,6 @@ export function useTvNestPlayer({
     setError(null);
     setBuffering(true);
     setReconnectAttempt(null);
-    // Nouveau média (épisode suivant…) : ne pas garder la position ni la durée du précédent.
     setPosition(livePositions.get(media.id) ?? media.progressSeconds ?? 0);
     setDuration(media.durationSeconds || 0);
 

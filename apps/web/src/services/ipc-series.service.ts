@@ -13,7 +13,10 @@ const vodDetailCache = new Map<string, UnifiedMedia>();
 // Réponse get_series_info gardée pour la session : rouvrir une série est instantané.
 // ponytail: cache en mémoire ; à persister en SQLite si les réouvertures après
 // redémarrage restent lentes sur certains serveurs.
-const seriesInfoCache = new Map<string, SeriesInfoPayload>();
+// ponytail: 30 min, assez pour revenir sur une fiche sans recharger, assez court pour voir
+// un épisode publié pendant la séance.
+const SERIES_INFO_TTL_MS = 30 * 60_000;
+const seriesInfoCache = new Map<string, { at: number; payload: SeriesInfoPayload }>();
 const SERIES_INFO_TIMEOUT_MS = 25_000;
 // Les positions viennent de la base : si elle est occupée (import d'une source), la fiche
 // s'affiche sans reprise plutôt que d'attendre.
@@ -158,7 +161,7 @@ export async function fetchXtreamSeriesDetail(
   const serverUrl = playlist.serverUrl;
   const loadInfo = async (): Promise<SeriesInfoPayload> => {
     const cached = seriesInfoCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached && Date.now() - cached.at < SERIES_INFO_TTL_MS) return cached.payload;
     const res = await withTimeout(
       window.electron.xtreamRequest({
         url: serverUrl,
@@ -177,7 +180,7 @@ export async function fetchXtreamSeriesDetail(
       throw new Error(message || 'Le serveur IPTV a refusé la demande.');
     }
     const payload = res.payload as SeriesInfoPayload;
-    seriesInfoCache.set(cacheKey, payload);
+    seriesInfoCache.set(cacheKey, { at: Date.now(), payload });
     return payload;
   };
 

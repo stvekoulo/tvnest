@@ -11,6 +11,14 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.9](https://github.com/stvekoulo/tvnest/compare/v1.0.8...v1.0.9) (2026-10-26)
+
+### Fixes
+
+- **player** — The next episode started by the countdown card now plays from the beginning instead of jumping to where the previous episode ended.
+- **player** — Progress watched in MPV or VLC is saved again and shown in Home. A series' Play button continues after the last finished episode, the next-episode countdown pauses with the video, and the MPV/VLC buttons on movie pages free the built-in stream first.
+- **ui** — Movie and series pages no longer show the catalog's filters, ratings and favorite buttons through them.
+
 # [1.0.8](https://github.com/stvekoulo/tvnest/compare/v1.0.7...v1.0.8) (2026-10-26)
 
 ### Fixes

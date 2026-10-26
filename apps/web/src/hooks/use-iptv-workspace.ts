@@ -19,6 +19,7 @@ import {
   fetchSavedPlaybackPosition,
   launchExternalPlayer,
   loadPreferences,
+  saveExternalPlaybackProgress,
   savePreferences,
   startVodDownload,
 } from '@/services/ipc-system.service';
@@ -51,6 +52,8 @@ export function useIptvWorkspace() {
   const [activeMedia, setActiveMedia] = useState<UnifiedMedia | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [theaterOpen, setTheaterOpen] = useState<boolean>(false);
+  const theaterOpenRef = useRef(theaterOpen);
+  theaterOpenRef.current = theaterOpen;
   const [addSourceOpen, setAddSourceOpen] = useState<boolean>(false);
 
   // État de la page dédiée Film / Série (remplace l'ancien modal).
@@ -62,16 +65,32 @@ export function useIptvWorkspace() {
   const [recordings, setRecordings] = useState<ElectronRecordingItem[]>([]);
   const [prefs, setPrefs] = useState<AppPreferences>(() => loadPreferences());
 
+  // Un nouveau message repart pour 3,5 s : l'ancien minuteur ne l'efface pas avant.
+  const toastTimerRef = useRef<number | undefined>(undefined);
   const notify = useCallback((msg: string) => {
     setToast(msg);
-    window.setTimeout(() => setToast(null), 3500);
+    window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const setSection = useCallback((next: AppSection) => {
+  // Fermer la fiche invalide aussi sa requête en cours (une réponse tardive est ignorée).
+  const detailRequestRef = useRef(0);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const closeMediaDetail = useCallback(() => {
+    detailRequestRef.current += 1;
     setDetailMedia(null);
     setSeriesDetail(null);
-    setSectionState(next);
+    setDetailError(null);
+    setDetailLoading(false);
   }, []);
+
+  const setSection = useCallback(
+    (next: AppSection) => {
+      closeMediaDetail();
+      setSectionState(next);
+    },
+    [closeMediaDetail]
+  );
 
   const activePlaylist = useMemo(
     () => playlists.find((p) => p.id === activePlaylistId) || playlists[0] || null,
@@ -93,11 +112,11 @@ export function useIptvWorkspace() {
     try {
       const list = await fetchSavedPlaylists();
       setPlaylists(list);
-      if (list.length > 0 && !activePlaylistId) setActivePlaylistId(list[0].id);
+      setActivePlaylistId((curr) => curr ?? list[0]?.id ?? null);
     } finally {
       setLoading(false);
     }
-  }, [activePlaylistId]);
+  }, []);
 
   useEffect(() => {
     void refreshPlaylists();
@@ -113,18 +132,17 @@ export function useIptvWorkspace() {
       });
     });
     const unsubBack = window.electron.onWindowBackRequested?.(() => {
-      setTheaterOpen((open) => {
-        if (open) return false;
-        setDetailMedia(null);
-        setSeriesDetail(null);
-        return false;
-      });
+      if (theaterOpenRef.current) setTheaterOpen(false);
+      else closeMediaDetail();
     });
+    // MPV / VLC externes : leur position remonte toutes les 5 s et est enregistrée ici.
+    const unsubExternal = window.electron.onPlaybackPositionUpdate?.(saveExternalPlaybackProgress);
     return () => {
       unsubDl?.();
       unsubBack?.();
+      unsubExternal?.();
     };
-  }, [refreshPlaylists]);
+  }, [refreshPlaylists, closeMediaDetail]);
 
   useEffect(() => {
     if (section === 'downloads') {
@@ -137,8 +155,6 @@ export function useIptvWorkspace() {
 
   // Ouvre la page complète dédiée d'un film ou d'une série avec métadonnées serveur.
   // Fiche ouverte en dernier : une réponse plus lente d'une fiche précédente est ignorée.
-  const detailRequestRef = useRef(0);
-  const [detailError, setDetailError] = useState<string | null>(null);
 
   const openMediaDetail = useCallback(
     async (item: UnifiedMedia) => {
@@ -172,14 +188,6 @@ export function useIptvWorkspace() {
     },
     [playlistOf]
   );
-
-  const closeMediaDetail = useCallback(() => {
-    detailRequestRef.current += 1;
-    setDetailMedia(null);
-    setSeriesDetail(null);
-    setDetailError(null);
-    setDetailLoading(false);
-  }, []);
 
   // Lecteur externe (MPV / VLC). Le lecteur intégré est arrêté avant : beaucoup de comptes
   // IPTV n'autorisent qu'une connexion à la fois, et le serveur refuserait celle de MPV.
@@ -339,7 +347,7 @@ export function useIptvWorkspace() {
     activePlaylist,
     playlistOf,
     setActivePlaylistId: (id: string | null) => {
-      setDetailMedia(null);
+      closeMediaDetail();
       setActivePlaylistId(id);
     },
     refreshPlaylists,

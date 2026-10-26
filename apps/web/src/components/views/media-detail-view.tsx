@@ -10,7 +10,7 @@ import { SeriesEpisodesPanel } from '@/components/views/series-episodes-panel';
 import { getSessionPosition } from '@/hooks/use-tvnest-player';
 import { t, type UiLanguage } from '@/lib/i18n';
 import { formatClock, shouldOfferResume } from '@/lib/resume-point';
-import { findResumeEpisode, listEpisodeMedia, type ResumePoint } from '@/lib/series-episodes';
+import { findResumeEpisode, nextUnwatchedEpisode, type ResumePoint } from '@/lib/series-episodes';
 import { fetchSavedPlaybackPosition } from '@/services/ipc-system.service';
 import type { SeriesDetail, UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 
@@ -121,7 +121,7 @@ export function MediaDetailView({
   const resolvePlayTarget = (): UnifiedMedia | null => {
     if (media.kind !== 'series') return media;
     if (!seriesDetail || seriesDetail.seasons.length === 0) return null;
-    return listEpisodeMedia(seriesDetail)[0] ?? null;
+    return nextUnwatchedEpisode(seriesDetail, getSessionPosition);
   };
 
   return (
@@ -238,7 +238,6 @@ export function MediaDetailView({
 
                 <MediaDetailActions
                   media={media}
-                  playlist={playlist}
                   uiLanguage={uiLanguage}
                   resumeLabel={resume?.label ?? ''}
                   onPlayInline={() => {
@@ -247,6 +246,9 @@ export function MediaDetailView({
                     if (target) startInlinePlayback(target);
                   }}
                   onRestart={resume ? () => playResumePoint(resume, 0, false) : undefined}
+                  onOpenExternal={(player) =>
+                    onOpenExternal(player, resume ? { ...media, progressSeconds: resume.positionSeconds } : media)
+                  }
                   onPlayTheater={() => {
                     if (resume) return playResumePoint(resume, resume.positionSeconds, true);
                     const target = resolvePlayTarget();

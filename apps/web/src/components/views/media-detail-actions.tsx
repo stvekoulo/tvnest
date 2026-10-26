@@ -5,17 +5,17 @@ import { ActionSwapButton } from '@/components/motion/action-swap';
 import { Button, StatefulButton, type ButtonState } from '@/components/motion/button';
 import { t, type UiLanguage } from '@/lib/i18n';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
-import { launchExternalPlayer } from '@/services/ipc-system.service';
-import type { UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
+import type { UnifiedMedia } from '@/types/iptv.types';
 
 interface MediaDetailActionsProps {
   media: UnifiedMedia;
-  playlist?: UnifiedPlaylist | null;
   uiLanguage: UiLanguage;
   /** Point de reprise (« S1E3 · 12:34 »), vide si rien n'est entamé. */
   resumeLabel: string;
   onPlayInline: () => void;
   onRestart?: () => void;
+  /** MPV / VLC via l'espace de travail : le lecteur intégré libère d'abord le flux. */
+  onOpenExternal: (player: 'mpv' | 'vlc') => void;
   onPlayTheater: () => void;
   onToggleFavorite: () => void;
   onDownload: () => Promise<void>;
@@ -23,11 +23,11 @@ interface MediaDetailActionsProps {
 
 export function MediaDetailActions({
   media,
-  playlist,
   uiLanguage,
   resumeLabel,
   onPlayInline,
   onRestart,
+  onOpenExternal,
   onPlayTheater,
   onToggleFavorite,
   onDownload,
@@ -84,14 +84,14 @@ export function MediaDetailActions({
           <Button
             size="md"
             variant="outline"
-            onClick={() => launchExternalPlayer('mpv', media, playlist)}
+            onClick={() => onOpenExternal('mpv')}
           >
             <Tv className="size-3.5" /> MPV
           </Button>
           <Button
             size="md"
             variant="outline"
-            onClick={() => launchExternalPlayer('vlc', media, playlist)}
+            onClick={() => onOpenExternal('vlc')}
           >
             <ExternalLink className="size-3.5" /> VLC
           </Button>

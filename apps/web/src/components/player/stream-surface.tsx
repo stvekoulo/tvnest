@@ -296,6 +296,7 @@ export function StreamSurface({
         <NextEpisodeCard
           key={media.id}
           next={nextEpisode}
+          paused={!playing}
           onPlayNext={onPlayNext}
           onDismiss={() => setNextDismissedFor(media.id)}
         />

@@ -56,6 +56,7 @@ export function App() {
 
   // Chaque rubrique s'ouvre en haut de page. Une fiche se pose PAR-DESSUS la liste, qui
   // reste montée : au retour, chaque zone de défilement (grille, groupes, recherche) est intacte.
+  // `isolate` garde les z-index de la liste (badges, menus) sous la fiche.
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [ws.section]);
@@ -65,7 +66,7 @@ export function App() {
   // Fiche Film ou Série : page pleine largeur posée sur la liste (sans modal).
   const renderDetail = () =>
     ws.detailMedia ? (
-      <div key={ws.detailMedia.id} className="absolute inset-0 overflow-y-auto bg-background">
+      <div key={ws.detailMedia.id} className="absolute inset-0 z-10 overflow-y-auto bg-background">
         <div className="p-6">
           <MediaDetailView
             media={ws.detailMedia}
@@ -301,7 +302,7 @@ export function App() {
           <main
             ref={mainRef}
             inert={Boolean(ws.detailMedia)}
-            className="h-full overflow-y-auto"
+            className="isolate h-full overflow-y-auto"
           >
             <Suspense fallback={null}>{renderSection()}</Suspense>
           </main>

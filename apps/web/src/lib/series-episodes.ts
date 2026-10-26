@@ -1,5 +1,5 @@
 // Épisodes d'une série sous forme de médias lisibles, dans l'ordre de visionnage.
-import { formatClock, shouldOfferResume } from '@/lib/resume-point';
+import { formatClock, RESUME_MIN_SECONDS, shouldOfferResume } from '@/lib/resume-point';
 import type { SeriesDetail, SeriesEpisode, UnifiedMedia } from '@/types/iptv.types';
 
 export function buildEpisodeMedia(series: UnifiedMedia, ep: SeriesEpisode): UnifiedMedia {
@@ -59,6 +59,22 @@ export function findResumeEpisode(
     }
   }
   return found;
+}
+
+/** « Lire » une série : l'épisode qui suit le dernier terminé, sinon le premier. */
+export function nextUnwatchedEpisode(
+  detail: SeriesDetail,
+  sessionPosition: (id: string) => number | undefined
+): UnifiedMedia | null {
+  const episodes = sortedEpisodes(detail);
+  let start = 0;
+  episodes.forEach((ep, index) => {
+    const position = sessionPosition(buildEpisodeMedia(detail.series, ep).id) ?? ep.progressSeconds ?? 0;
+    const finished = position >= RESUME_MIN_SECONDS && Boolean(ep.durationSeconds) && !shouldOfferResume(position, ep.durationSeconds);
+    if (finished) start = index + 1;
+  });
+  const ep = episodes[start] ?? episodes[0];
+  return ep ? buildEpisodeMedia(detail.series, ep) : null;
 }
 
 /** Épisode qui suit `currentId` (saison suivante après le dernier), ou null. */
