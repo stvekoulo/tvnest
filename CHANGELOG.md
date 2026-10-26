@@ -11,6 +11,16 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.10](https://github.com/stvekoulo/tvnest/compare/v1.0.9...v1.0.10) (2026-10-26)
+
+### Features
+
+- **player** — The player shows a Next episode button (shortcut N) when the series has another episode, and the next-episode card appears a little earlier, 20 to 35 seconds before the end.
+
+### Fixes
+
+- **xtream** — Adding or refreshing an Xtream source now explains why it failed (wrong credentials, expired or suspended subscription, access refused by the provider, unreachable server) instead of "[object Object]", and refused credentials no longer create an empty source.
+
 # [1.0.9](https://github.com/stvekoulo/tvnest/compare/v1.0.8...v1.0.9) (2026-10-26)
 
 ### Fixes
