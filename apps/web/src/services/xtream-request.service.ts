@@ -36,10 +36,14 @@ export function describeXtreamFailure(err: unknown): string {
   return text;
 }
 
-export async function requestXtream(url: string, params: Record<string, string>): Promise<unknown> {
+export async function requestXtream(
+  url: string,
+  params: Record<string, string>,
+  sessionId?: string
+): Promise<unknown> {
   let res: unknown;
   try {
-    res = await window.electron.xtreamRequest({ url, params });
+    res = await window.electron.xtreamRequest({ url, params, sessionId });
   } catch (err) {
     throw new Error(describeXtreamFailure(err));
   }
@@ -51,6 +55,32 @@ export async function requestXtream(url: string, params: Record<string, string>)
     throw new Error('Réponse inattendue du serveur IPTV.');
   }
   return (res as { payload: unknown }).payload;
+}
+
+// Certains serveurs laissent pendre une requête sur dix (constaté : 70 s puis coupure),
+// alors que la même requête renvoyée répond en moins d'une seconde. On abandonne vite
+// et on renvoie, plutôt que d'attendre la fin du délai.
+const QUICK_ATTEMPT_MS = [5_000, 6_000, 12_000];
+
+/** Requête de fiche (série, film) : réessais rapides tant que le serveur ne répond pas. */
+export async function requestXtreamQuick(url: string, params: Record<string, string>): Promise<unknown> {
+  for (const [index, ms] of QUICK_ATTEMPT_MS.entries()) {
+    const sessionId = `tvnest-quick-${crypto.randomUUID()}`;
+    let timer: number | undefined;
+    const timeout = new Promise<'timeout'>((resolve) => {
+      timer = window.setTimeout(() => resolve('timeout'), ms);
+    });
+    try {
+      const result = await Promise.race([requestXtream(url, params, sessionId), timeout]);
+      if (result !== 'timeout') return result;
+    } finally {
+      window.clearTimeout(timer);
+    }
+    // Attente abandonnée : la requête pendante est annulée côté Electron.
+    window.electron.xtreamCancelSession?.(sessionId)?.catch(() => {});
+    if (index === QUICK_ATTEMPT_MS.length - 1) break;
+  }
+  throw new Error('Le serveur IPTV met trop de temps à répondre.');
 }
 
 interface XtreamUserInfo {

@@ -11,6 +11,12 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.14](https://github.com/stvekoulo/tvnest/compare/v1.0.13...v1.0.14) (2026-10-26)
+
+### Fixes
+
+- **xtream** — Series and movie pages load quickly even when the provider leaves a request hanging: TVNest gives up after a few seconds and asks again, instead of waiting up to 25 seconds on "Chargement des épisodes".
+
 # [1.0.13](https://github.com/stvekoulo/tvnest/compare/v1.0.10...v1.0.13) (2026-10-26)
 
 ### Fixes

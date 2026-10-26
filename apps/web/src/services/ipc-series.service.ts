@@ -1,7 +1,7 @@
 // Service des fiches détaillées Films & Séries Xtream et favoris SQLite.
 import { buildXtreamStreamUrl } from '@/services/ipc-catalog.service';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
-import { requestXtream } from '@/services/xtream-request.service';
+import { requestXtreamQuick } from '@/services/xtream-request.service';
 import type {
   SeriesDetail,
   SeriesEpisode,
@@ -18,7 +18,7 @@ const vodDetailCache = new Map<string, UnifiedMedia>();
 // un épisode publié pendant la séance.
 const SERIES_INFO_TTL_MS = 30 * 60_000;
 const seriesInfoCache = new Map<string, { at: number; payload: SeriesInfoPayload }>();
-const SERIES_INFO_TIMEOUT_MS = 25_000;
+const seriesInfoInflight = new Map<string, Promise<SeriesInfoPayload>>();
 // Les positions viennent de la base : si elle est occupée (import d'une source), la fiche
 // s'affiche sans reprise plutôt que d'attendre.
 const POSITIONS_TIMEOUT_MS = 3_000;
@@ -57,19 +57,12 @@ export async function fetchXtreamMovieDetail(
   const [res, pos] = await Promise.all([
     vodDetailCache.has(cacheKey)
       ? Promise.resolve(null)
-      : withTimeout(
-          window.electron.xtreamRequest({
-            url: playlist.serverUrl,
-            params: {
-              username: playlist.username || '',
-              password: playlist.password || '',
-              action: 'get_vod_info',
-              vod_id: String(movie.xtreamId),
-            },
-          }),
-          SERIES_INFO_TIMEOUT_MS,
-          'timeout'
-        ).catch(() => null),
+      : requestXtreamQuick(playlist.serverUrl, {
+          username: playlist.username || '',
+          password: playlist.password || '',
+          action: 'get_vod_info',
+          vod_id: String(movie.xtreamId),
+        }).catch(() => null),
     withTimeout(
       window.electron.dbGetPlaybackPosition(playlist.id, movie.xtreamId, 'vod'),
       POSITIONS_TIMEOUT_MS,
@@ -87,13 +80,10 @@ export async function fetchXtreamMovieDetail(
     };
   }
 
-  const payload =
-    res && 'payload' in res
-      ? (res.payload as {
-          info?: Record<string, unknown>;
-          movie_data?: Record<string, unknown>;
-        } | null)
-      : null;
+  const payload = res as {
+    info?: Record<string, unknown>;
+    movie_data?: Record<string, unknown>;
+  } | null;
 
   const info = payload?.info || {};
   const movieData = payload?.movie_data || {};
@@ -163,18 +153,23 @@ export async function fetchXtreamSeriesDetail(
   const loadInfo = async (): Promise<SeriesInfoPayload> => {
     const cached = seriesInfoCache.get(cacheKey);
     if (cached && Date.now() - cached.at < SERIES_INFO_TTL_MS) return cached.payload;
-    const payload = (await withTimeout(
-      requestXtream(serverUrl, {
+    // Fiche rouverte (ou « Réessayer ») pendant le chargement : une seule requête.
+    let pending = seriesInfoInflight.get(cacheKey);
+    if (!pending) {
+      pending = requestXtreamQuick(serverUrl, {
         username: playlist.username || '',
         password: playlist.password || '',
         action: 'get_series_info',
         series_id: String(series.xtreamId),
-      }),
-      SERIES_INFO_TIMEOUT_MS,
-      'Le serveur IPTV met trop de temps à répondre.'
-    )) as SeriesInfoPayload;
-    seriesInfoCache.set(cacheKey, { at: Date.now(), payload });
-    return payload;
+      })
+        .then((payload) => {
+          seriesInfoCache.set(cacheKey, { at: Date.now(), payload: payload as SeriesInfoPayload });
+          return payload as SeriesInfoPayload;
+        })
+        .finally(() => seriesInfoInflight.delete(cacheKey));
+      seriesInfoInflight.set(cacheKey, pending);
+    }
+    return pending;
   };
 
   const [payload, positions] = await Promise.all([

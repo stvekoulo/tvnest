@@ -404,3 +404,28 @@ test('adding an Xtream source explains refusals instead of "[object Object]"', a
     await checkXtreamAccount('http://x', creds);
     delete globalThis.window;
 });
+
+test('a hanging series request is abandoned, cancelled and resent', async () => {
+    const { requestXtreamQuick } = await loadSource('apps/web/src/services/xtream-request.service.ts');
+    const sessions = [];
+    const cancelled = [];
+    globalThis.window = {
+        setTimeout: (cb) => setTimeout(cb, 0), // délais d'essai immédiats pour le test
+        clearTimeout,
+        electron: {
+            xtreamRequest: ({ sessionId }) => {
+                sessions.push(sessionId);
+                return sessions.length === 1 ? new Promise(() => {}) : Promise.resolve({ payload: { episodes: {} } });
+            },
+            xtreamCancelSession: async (id) => cancelled.push(id),
+        },
+    };
+    const payload = await requestXtreamQuick('http://x', { action: 'get_series_info' });
+    assert.deepEqual(payload, { episodes: {} });
+    assert.equal(sessions.length, 2, 'resent once after the first attempt stalled');
+    assert.deepEqual(cancelled, [sessions[0]], 'the stalled request is cancelled in Electron');
+
+    window.electron.xtreamRequest = () => new Promise(() => {});
+    await assert.rejects(requestXtreamQuick('http://x', {}), /trop de temps/, 'gives up after the last attempt');
+    delete globalThis.window;
+});
