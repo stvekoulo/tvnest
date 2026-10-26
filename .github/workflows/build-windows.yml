@@ -74,9 +74,12 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               # Relance après un échec : le brouillon créé au premier essai est réutilisé.
+              # Liste plutôt que `gh release view` : son « release not found » sur stderr devient
+              # une erreur bloquante dans Windows PowerShell 5.1 (ErrorActionPreference=stop).
               run: |
-                  gh release view $env:GITHUB_REF_NAME *> $null
-                  if ($LASTEXITCODE -eq 0) {
+                  $tags = gh release list --limit 50 --json tagName --jq '.[].tagName'
+                  if ($LASTEXITCODE) { exit $LASTEXITCODE }
+                  if ($tags -contains $env:GITHUB_REF_NAME) {
                       Write-Output "Release $env:GITHUB_REF_NAME déjà créée : réutilisée."
                       exit 0
                   }
