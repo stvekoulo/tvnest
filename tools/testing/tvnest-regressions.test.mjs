@@ -132,7 +132,7 @@ test('catalog filters and reset stay in their section and source', async () => {
       export const fetchDashboardHighlights = async () => ({spotlight:[],liveChannels:[],recentMovies:[],recentSeries:[],favorites:[],continueWatching:[]});
       export const queryFilteredCatalog = async () => ({items:[], total:0, years:[], tookMs:0});`,
             '@/services/ipc-system.service':
-                'export const fetchCurrentEpgForChannels = async () => ({});',
+                "export const fetchCurrentEpgForChannels = async () => ({}); export const WATCH_PROGRESS_EVENT = 'tvnest:watch-progress';",
         }
     );
     let current;
@@ -240,4 +240,52 @@ test('series detail resumes the last started episode, session position first', a
     assert.equal(point.label, 'S1E2 · 5:00');
     assert.equal(findResumeEpisode(detail, (id) => (id === 'show-ep-3' ? 90 : undefined)).item.id, 'show-ep-3');
     assert.equal(findResumeEpisode({ ...detail, episodesBySeason: { 1: [ep('3', 3, 0)] } }, none), null);
+});
+
+test('watch progress: no startup overwrite, throttled saves, seeks and flush, episode series id', async () => {
+    const { recordMediaWatchProgress, flushMediaWatchProgress } = await loadSource(
+        'apps/web/src/services/ipc-system.service.ts',
+        {
+            '@/services/ipc-playlists.service': 'export const isElectronRuntime = () => true;',
+            '@/services/ipc-playback.service': 'export const resolveMediaPlayback = async () => ({});',
+            '@/lib/i18n': 'export const buildMpvLanguageArgs = () => [];',
+        }
+    );
+    const saved = [];
+    const recent = [];
+    globalThis.window = {
+        electron: {
+            dbSavePlaybackPosition: async (_playlistId, data) => saved.push(data),
+            dbAddRecentItem: async (contentId) => recent.push(contentId),
+        },
+        dispatchEvent: () => true,
+    };
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+    const episode = {
+        ...item, id: 'show-ep-7', kind: 'episode', xtreamId: 7,
+        seriesXtreamId: 70, seriesContentId: 700, seasonNumber: 1, episodeNumber: 2,
+    };
+
+    recordMediaWatchProgress(episode, 600, 1500); // resume point announced before playback
+    recordMediaWatchProgress(episode, 0.4, 1500); // engine glitch before seeking to it
+    assert.equal(saved.length, 0, 'a jump that is not playback never overwrites the resume point');
+    assert.deepEqual(recent, [700], 'an episode puts its series in the history');
+
+    recordMediaWatchProgress(episode, 600, 1500);
+    recordMediaWatchProgress(episode, 601, 1500);
+    recordMediaWatchProgress(episode, 603, 1500);
+    await flush();
+    assert.deepEqual(saved.map((s) => s.positionSeconds), [601], 'first real progress is saved, then throttled');
+    assert.equal(saved[0].seriesXtreamId, 70);
+    assert.equal(saved[0].episodeNumber, 2);
+
+    recordMediaWatchProgress(episode, 120, 1500); // seek backwards
+    await flush();
+    assert.equal(saved.at(-1).positionSeconds, 120, 'a backward seek is saved right away');
+
+    recordMediaWatchProgress(episode, 122, 1500);
+    flushMediaWatchProgress(episode.id, true); // pause / stop
+    await flush();
+    assert.equal(saved.at(-1).positionSeconds, 122, 'the last position is written when playback stops');
+    delete globalThis.window;
 });

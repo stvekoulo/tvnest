@@ -110,13 +110,14 @@ export async function fetchDashboardHighlights(
     const mapList = (rows: DbCatalogRow[]) =>
       (rows || []).map((r) => mapDbCatalogRow(playlist, r));
     const recentVod = mapList(res.recentVod);
+    const continueWatching = await withSavedProgress(playlist.id, mapList(res.recentlyViewed));
     return {
       spotlight: mapList(res.spotlight),
       liveChannels: mapList(res.featuredLive),
       recentMovies: recentVod.filter((m) => m.kind === 'movie'),
       recentSeries: recentVod.filter((m) => m.kind === 'series'),
       favorites: mapList(res.favorites),
-      continueWatching: mapList(res.recentlyViewed),
+      continueWatching,
     };
   }
 
@@ -129,6 +130,25 @@ export async function fetchDashboardHighlights(
     favorites: items.filter((i) => i.isFavorite).slice(0, 24),
     continueWatching: [],
   };
+}
+
+// Barre de progression de l'historique : film = sa position, série = dernier épisode lu.
+async function withSavedProgress(playlistId: string, rows: UnifiedMedia[]): Promise<UnifiedMedia[]> {
+  if (rows.length === 0 || !window.electron.dbGetRecentPlaybackPositions) return rows;
+  const positions = await window.electron.dbGetRecentPlaybackPositions(playlistId, 200).catch(() => []);
+  const movies = new Map<number, (typeof positions)[number]>();
+  const series = new Map<number, (typeof positions)[number]>();
+  // Triées de la plus récente à la plus ancienne : la première rencontrée l'emporte.
+  for (const p of positions) {
+    if (p.contentType === 'vod' && !movies.has(p.contentXtreamId)) movies.set(p.contentXtreamId, p);
+    if (p.contentType === 'episode' && p.seriesXtreamId && !series.has(p.seriesXtreamId)) {
+      series.set(p.seriesXtreamId, p);
+    }
+  }
+  return rows.map((row) => {
+    const p = row.xtreamId ? (row.kind === 'series' ? series : movies).get(row.xtreamId) : undefined;
+    return p ? { ...row, progressSeconds: p.positionSeconds, durationSeconds: p.durationSeconds } : row;
+  });
 }
 
 // Exécute une recherche/filtrage multicritère dans SQLite avec pagination rapide.

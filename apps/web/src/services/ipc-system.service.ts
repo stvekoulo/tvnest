@@ -192,27 +192,87 @@ export async function searchEpgGuide(query: string): Promise<EpgProgram[]> {
   return window.electron.searchEpgPrograms(query.trim(), 60);
 }
 
-export async function recordMediaWatchProgress(
+// Sauvegarde de la progression : au plus toutes les 5 s de lecture (ou après un saut),
+// puis la dernière position à la pause, au changement de média et à l'arrêt.
+const SAVE_EVERY_SECONDS = 5;
+export const WATCH_PROGRESS_EVENT = 'tvnest:watch-progress';
+export interface WatchProgressDetail {
+  item: UnifiedMedia;
+  positionSeconds: number;
+  durationSeconds: number;
+}
+
+interface WatchSession {
+  savedAt: number;
+  pending: WatchProgressDetail | null;
+  /** Dernière position vue, et lecture réellement en cours (la position avance). */
+  last: number;
+  confirmed: boolean;
+}
+const watchSessions = new Map<string, WatchSession>();
+
+function writeWatchProgress(detail: WatchProgressDetail): void {
+  const { item, positionSeconds, durationSeconds } = detail;
+  if (!item.xtreamId || item.kind === 'live' || !(durationSeconds > 0)) return;
+  window.electron
+    .dbSavePlaybackPosition(item.playlistId, {
+      contentXtreamId: item.xtreamId,
+      contentType: item.kind === 'episode' ? 'episode' : 'vod',
+      seriesXtreamId: item.seriesXtreamId,
+      seasonNumber: item.seasonNumber,
+      episodeNumber: item.episodeNumber,
+      positionSeconds: Math.floor(positionSeconds),
+      durationSeconds: Math.floor(durationSeconds),
+    })
+    .then(() => window.dispatchEvent(new CustomEvent(WATCH_PROGRESS_EVENT, { detail })))
+    .catch(() => {});
+}
+
+/** Appelé à chaque nouvelle position du lecteur ; n'écrit en base que si nécessaire. */
+export function recordMediaWatchProgress(
   item: UnifiedMedia,
   positionSeconds: number,
   durationSeconds: number
-): Promise<void> {
-  if (!isElectronRuntime()) return;
-  if (item.dbContentId) {
-    await window.electron.dbAddRecentItem(
-      item.dbContentId,
-      item.playlistId,
-      item.backdropUrl
-    );
+): void {
+  if (!isElectronRuntime() || !(positionSeconds > 0)) return;
+  const detail = { item, positionSeconds, durationSeconds };
+  let session = watchSessions.get(item.id);
+  if (!session) {
+    // Premier instant de lecture : le média (ou sa série) passe en tête de l'historique.
+    const contentId = item.dbContentId ?? item.seriesContentId;
+    if (contentId) {
+      window.electron.dbAddRecentItem(contentId, item.playlistId, item.backdropUrl).catch(() => {});
+    }
+    session = { savedAt: Number.NEGATIVE_INFINITY, pending: null, last: positionSeconds, confirmed: false };
+    watchSessions.set(item.id, session);
   }
-  if (item.xtreamId && durationSeconds > 0 && item.kind !== 'live') {
-    await window.electron.dbSavePlaybackPosition(item.playlistId, {
-      contentXtreamId: item.xtreamId,
-      contentType: item.kind === 'episode' ? 'episode' : 'vod',
-      positionSeconds: Math.floor(positionSeconds),
-      durationSeconds: Math.floor(durationSeconds),
-    });
+  // Au démarrage, le lecteur peut annoncer 0 avant de sauter au point de reprise :
+  // rien n'est écrit tant que la position n'avance pas normalement.
+  if (!session.confirmed) {
+    const step = positionSeconds - session.last;
+    session.last = positionSeconds;
+    if (!(step > 0 && step <= 3)) return;
+    session.confirmed = true;
   }
+  if (Math.abs(positionSeconds - session.savedAt) < SAVE_EVERY_SECONDS) {
+    session.pending = detail;
+    return;
+  }
+  session.savedAt = positionSeconds;
+  session.pending = null;
+  writeWatchProgress(detail);
+}
+
+/** Écrit la dernière position non sauvegardée ; `end` clôt la séance (pause exclue). */
+export function flushMediaWatchProgress(mediaId: string, end = false): void {
+  const session = watchSessions.get(mediaId);
+  if (!session) return;
+  if (session.pending && session.confirmed) {
+    session.savedAt = session.pending.positionSeconds;
+    writeWatchProgress(session.pending);
+    session.pending = null;
+  }
+  if (end) watchSessions.delete(mediaId);
 }
 
 export async function startVodDownload(

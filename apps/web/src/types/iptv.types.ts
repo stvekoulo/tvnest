@@ -96,6 +96,11 @@ export interface UnifiedMedia {
   id: string;
   dbContentId?: number;
   xtreamId?: number;
+  /** Épisode : série d'origine (positions de reprise et historique « En cours »). */
+  seriesXtreamId?: number;
+  seriesContentId?: number;
+  seasonNumber?: number;
+  episodeNumber?: number;
   playlistId: string;
   playlistTitle?: string;
   portalKind: PortalKind;

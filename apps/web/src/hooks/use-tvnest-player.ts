@@ -19,7 +19,7 @@ import {
   resolveMediaPlayback,
 } from '@/services/ipc-playback.service';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
-import { recordMediaWatchProgress } from '@/services/ipc-system.service';
+import { flushMediaWatchProgress, recordMediaWatchProgress } from '@/services/ipc-system.service';
 import type { UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 import { toMpvVolume, useTvNestPlayerControls } from './use-tvnest-mpv-controls';
 import { destroyWebEngines, startWebMediaEngine } from './use-tvnest-web-engine';
@@ -130,6 +130,16 @@ export function useTvNestPlayer({
   );
   const [duration, setDuration] = useState(media.durationSeconds || 0);
 
+  // Progression en base (moteur libmpv comme moteur Web) : voir recordMediaWatchProgress.
+  useEffect(() => {
+    recordMediaWatchProgress(media, position, duration);
+    // `media` suit `media.id` : pas besoin de le lister.
+  }, [media.id, position, duration]);
+  useEffect(() => {
+    if (!playing) flushMediaWatchProgress(media.id);
+  }, [playing, media.id]);
+  useEffect(() => () => flushMediaWatchProgress(media.id, true), [media.id]);
+
   useEffect(() => {
     if (media.kind === 'live' || position <= 0) return;
     // Arrivé au générique : la prochaine ouverture repart du début.
@@ -162,7 +172,6 @@ export function useTvNestPlayer({
   const sessionIdRef = useRef<string | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<mpegts.Player | null>(null);
-  const lastSavedSecRef = useRef<number>(0);
   const mpvModeRef = useRef<'frame-copy' | 'native' | null>(null);
   const nativeHiddenRef = useRef(false);
   const lastBoundsRef = useRef<Bounds | null>(null);
@@ -274,17 +283,6 @@ export function useTvNestPlayer({
               setBuffering(snap.status === 'loading' || snap.status === 'idle');
               if (snap.status === 'error' && snap.error) setError(describeMpvError(snap.error));
               else if (snap.status === 'playing') setError(null);
-              if (
-                snap.durationSeconds &&
-                snap.positionSeconds - lastSavedSecRef.current >= 5
-              ) {
-                lastSavedSecRef.current = snap.positionSeconds;
-                recordMediaWatchProgress(
-                  media,
-                  snap.positionSeconds,
-                  snap.durationSeconds
-                );
-              }
             }
           );
 

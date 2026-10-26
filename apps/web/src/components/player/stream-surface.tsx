@@ -6,7 +6,6 @@ import { Loader } from '@/components/motion/loader';
 import { useTvNestPlayer } from '@/hooks/use-tvnest-player';
 import { cn } from '@/lib/utils';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
-import { recordMediaWatchProgress } from '@/services/ipc-system.service';
 import type { UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 import { NextEpisodeCard, nextEpisodeLeadSeconds } from './next-episode-card';
 import { PlayerOsdControls } from './player-osd-controls';
@@ -220,10 +219,7 @@ export function StreamSurface({
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           player.setPosition(v.currentTime);
-          if (v.duration && Number.isFinite(v.duration)) {
-            player.setDuration(v.duration);
-            recordMediaWatchProgress(media, v.currentTime, v.duration);
-          }
+          if (v.duration && Number.isFinite(v.duration)) player.setDuration(v.duration);
         }}
         onError={() => {
           if (player.engine !== 'libmpv') {

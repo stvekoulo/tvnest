@@ -9,6 +9,7 @@ import { DashboardHeroRow, EmptyOnboardingState } from '@/components/views/dashb
 import { MediaRailSection } from '@/components/views/media-rail-section';
 import type { DashboardHighlightsState } from '@/hooks/use-catalog-query';
 import type { UiLanguage } from '@/lib/i18n';
+import { isSameWatchItem } from '@/lib/resume-point';
 import type {
   AppSection,
   EpgProgram,
@@ -84,9 +85,12 @@ export function DashboardBentoView({
   const pickItem = pickPool[pickIdx % pickCount];
   // « Reprendre » = média en cours, sinon dernier élément réellement regardé (historique).
   const resumeItem = activeMedia || highlights.continueWatching[0] || null;
+  // Média en cours : sa ligne d'historique porte la progression mise à jour en direct.
+  const progressOf =
+    (activeMedia && highlights.continueWatching.find((r) => isSameWatchItem(r, activeMedia))) || resumeItem;
   const resumeProgress =
-    resumeItem?.progressSeconds && resumeItem.durationSeconds
-      ? Math.min(100, (resumeItem.progressSeconds / resumeItem.durationSeconds) * 100)
+    progressOf?.progressSeconds && progressOf.durationSeconds
+      ? Math.min(100, (progressOf.progressSeconds / progressOf.durationSeconds) * 100)
       : null;
   // Une seule ligne de 5 par rangée.
   const vodRow = (highlights.recentMovies.length > 0 ? highlights.recentMovies : fallbackItems).slice(0, 5);

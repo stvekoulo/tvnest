@@ -1,4 +1,5 @@
 // Point de reprise d'un film ou d'un épisode : quand proposer « Reprendre / Recommencer ».
+import type { UnifiedMedia } from '@/types/iptv.types';
 
 /** En dessous, ce n'est pas un visionnage entamé (bande-annonce, clic par erreur). */
 export const RESUME_MIN_SECONDS = 30;
@@ -12,6 +13,13 @@ export function shouldOfferResume(positionSeconds: number, durationSeconds?: num
     positionSeconds < durationSeconds * 0.95 &&
     durationSeconds - positionSeconds > RESUME_END_MARGIN_SECONDS
   );
+}
+
+/** Ligne d'historique (film, ou série pour un épisode) correspondant au média lu. */
+export function isSameWatchItem(row: UnifiedMedia, played: UnifiedMedia): boolean {
+  if (row.playlistId !== played.playlistId) return false;
+  if (row.id === played.id) return true;
+  return row.kind === 'series' && played.kind === 'episode' && row.xtreamId === played.seriesXtreamId;
 }
 
 /** 754 → « 12:34 », 4521 → « 1:15:21 ». */

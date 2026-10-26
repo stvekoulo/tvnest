@@ -8,7 +8,7 @@ import { WindowTitlebar } from '@/components/shell/window-titlebar';
 import { CatalogWorkspaceView } from '@/components/views/catalog-workspace-view';
 import { DashboardBentoView } from '@/components/views/dashboard-bento-view';
 import { MediaDetailView } from '@/components/views/media-detail-view';
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { useAppUpdate } from '@/hooks/use-app-update';
 import { useIptvWorkspace } from '@/hooks/use-iptv-workspace';
 import { useSourceAutoRefresh } from '@/hooks/use-source-auto-refresh';
@@ -54,39 +54,18 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Rubrique ou fiche : en haut de page. Retour d'une fiche : la liste reprend où elle était.
-  const listScrollTop = useRef(0);
-  const detailId = ws.detailMedia?.id;
-  useLayoutEffect(() => {
-    listScrollTop.current = 0;
+  // Chaque rubrique s'ouvre en haut de page. Une fiche se pose PAR-DESSUS la liste, qui
+  // reste montée : au retour, chaque zone de défilement (grille, groupes, recherche) est intacte.
+  useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [ws.section]);
-  useLayoutEffect(() => {
-    const main = mainRef.current;
-    if (!main) return;
-    const target = detailId ? 0 : listScrollTop.current;
-    main.scrollTo({ top: target });
-    const content = main.firstElementChild;
-    if (main.scrollTop >= target - 1 || !content) return;
-    // Résultats rechargés après coup (recherche) : on réapplique quand le contenu grandit.
-    const observer = new ResizeObserver(() => {
-      main.scrollTo({ top: target });
-      if (main.scrollTop >= target - 1) observer.disconnect();
-    });
-    observer.observe(content);
-    const stop = window.setTimeout(() => observer.disconnect(), 3000);
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(stop);
-    };
-  }, [detailId]);
   // L'aperçu reste en place sous le Cinéma : le lecteur unique y revient sans rechargement.
   const suppressPreviewPlayer = Boolean(ws.detailMedia);
 
-  const renderSection = () => {
-    // Toute fiche Film ou Série s'ouvre dans sa propre page dédiée pleine largeur (sans modal).
-    if (ws.detailMedia) {
-      return (
+  // Fiche Film ou Série : page pleine largeur posée sur la liste (sans modal).
+  const renderDetail = () =>
+    ws.detailMedia ? (
+      <div key={ws.detailMedia.id} className="absolute inset-0 overflow-y-auto bg-background">
         <div className="p-6">
           <MediaDetailView
             media={ws.detailMedia}
@@ -108,9 +87,10 @@ export function App() {
             onDownload={ws.downloadMedia}
           />
         </div>
-      );
-    }
+      </div>
+    ) : null;
 
+  const renderSection = () => {
     switch (ws.section) {
       case 'dashboard':
         return (
@@ -317,15 +297,16 @@ export function App() {
           onOpenAddSource={() => ws.setAddSourceOpen(true)}
         />
 
-        <main
-          ref={mainRef}
-          className="min-h-0 flex-1 overflow-y-auto"
-          onScroll={(e) => {
-            if (!detailId) listScrollTop.current = e.currentTarget.scrollTop;
-          }}
-        >
-          <Suspense fallback={null}>{renderSection()}</Suspense>
-        </main>
+        <div className="relative min-h-0 flex-1">
+          <main
+            ref={mainRef}
+            inert={Boolean(ws.detailMedia)}
+            className="h-full overflow-y-auto"
+          >
+            <Suspense fallback={null}>{renderSection()}</Suspense>
+          </main>
+          {renderDetail()}
+        </div>
       </div>
 
       <ResumePromptModal prompt={ws.resumePrompt} onAnswer={ws.answerResumePrompt} />

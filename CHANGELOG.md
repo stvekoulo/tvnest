@@ -11,6 +11,12 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.8](https://github.com/stvekoulo/tvnest/compare/v1.0.7...v1.0.8) (2026-10-26)
+
+### Fixes
+
+- **player** — Watch progress is saved reliably: every 5 seconds, after a seek, on pause and when playback stops, and a startup glitch can no longer erase a resume point. Episode progress now shows on the series page and in Home's resume tile, which updates live while you watch. Going back from a movie or series page keeps the list where it was.
+
 # [1.0.7](https://github.com/stvekoulo/tvnest/compare/v1.0.5...v1.0.7) (2026-10-25)
 
 ### Fixes

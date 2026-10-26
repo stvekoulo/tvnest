@@ -6,7 +6,12 @@ import {
   fetchDashboardHighlights,
   queryFilteredCatalog,
 } from '@/services/ipc-catalog.service';
-import { fetchCurrentEpgForChannels } from '@/services/ipc-system.service';
+import { isSameWatchItem } from '@/lib/resume-point';
+import {
+  fetchCurrentEpgForChannels,
+  WATCH_PROGRESS_EVENT,
+  type WatchProgressDetail,
+} from '@/services/ipc-system.service';
 import type {
   AppPreferences,
   AppSection,
@@ -112,6 +117,30 @@ export function useCatalogQuery(
 
   useEffect(() => {
     void reloadOverview();
+  }, [reloadOverview]);
+
+  // « En cours » en temps réel : chaque sauvegarde de progression remonte le média en tête
+  // avec sa nouvelle barre ; un média absent de l'historique recharge l'Accueil.
+  useEffect(() => {
+    let reloadTimer: number | undefined;
+    const onProgress = (e: Event) => {
+      const { item, positionSeconds, durationSeconds } = (e as CustomEvent<WatchProgressDetail>).detail;
+      setHighlights((prev) => {
+        const row = prev.continueWatching.find((r) => isSameWatchItem(r, item));
+        if (!row) {
+          window.clearTimeout(reloadTimer);
+          reloadTimer = window.setTimeout(() => void reloadOverview(), 1500);
+          return prev;
+        }
+        const updated = { ...row, progressSeconds: positionSeconds, durationSeconds };
+        return { ...prev, continueWatching: [updated, ...prev.continueWatching.filter((r) => r !== row)] };
+      });
+    };
+    window.addEventListener(WATCH_PROGRESS_EVENT, onProgress);
+    return () => {
+      window.removeEventListener(WATCH_PROGRESS_EVENT, onProgress);
+      window.clearTimeout(reloadTimer);
+    };
   }, [reloadOverview]);
 
   const queryType = useMemo<'live' | 'movie' | 'series' | 'all'>(() => {

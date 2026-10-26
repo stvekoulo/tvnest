@@ -6,6 +6,10 @@ export function buildEpisodeMedia(series: UnifiedMedia, ep: SeriesEpisode): Unif
   return {
     id: `${series.id}-ep-${ep.id}`,
     xtreamId: Number(ep.id) || series.xtreamId,
+    seriesXtreamId: series.xtreamId,
+    seriesContentId: series.dbContentId,
+    seasonNumber: ep.seasonNum,
+    episodeNumber: ep.episodeNum,
     playlistId: series.playlistId,
     playlistTitle: series.playlistTitle,
     portalKind: series.portalKind,
