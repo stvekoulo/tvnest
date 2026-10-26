@@ -61,9 +61,11 @@ jobs:
                   pnpm embedded-mpv:stage-runtime:windows-archive --
                   "${{ steps.mpv-pin.outputs.url }}" "${{ steps.mpv-pin.outputs.sha256 }}"
 
+            # `--parallel=1` : l'interface et libmpv compilés l'un après l'autre. En parallèle, le
+            # compilateur C++ a manqué de mémoire (C1060) sur la machine du runner (8 Go).
             - name: Build installer
               if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-              run: pnpm run make:app -- --publishPolicy=never
+              run: pnpm run make:app -- --publishPolicy=never --parallel=1
 
             # electron-builder envoie ses fichiers en parallèle : sans release existante, chaque
             # envoi en crée une et le tag se retrouve avec des releases en double.
@@ -71,15 +73,20 @@ jobs:
               if: ${{ startsWith(github.ref, 'refs/tags/v') }}
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: >
-                  gh release create $env:GITHUB_REF_NAME --draft --verify-tag --generate-notes
-                  --title ("TVNest " + $env:GITHUB_REF_NAME.TrimStart('v'))
+              # Relance après un échec : le brouillon créé au premier essai est réutilisé.
+              run: |
+                  gh release view $env:GITHUB_REF_NAME *> $null
+                  if ($LASTEXITCODE -eq 0) {
+                      Write-Output "Release $env:GITHUB_REF_NAME déjà créée : réutilisée."
+                      exit 0
+                  }
+                  gh release create $env:GITHUB_REF_NAME --draft --verify-tag --generate-notes --title ("TVNest " + $env:GITHUB_REF_NAME.TrimStart('v'))
 
             - name: Build and publish release
               if: ${{ startsWith(github.ref, 'refs/tags/v') }}
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: pnpm run make:app -- --publishPolicy=always
+              run: pnpm run make:app -- --publishPolicy=always --parallel=1
 
             # Publiée seulement une fois complète : la mise à jour auto ne voit jamais de release partielle.
             - name: Publish GitHub release

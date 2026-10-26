@@ -11,7 +11,7 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
-# [1.0.11](https://github.com/stvekoulo/tvnest/compare/v1.0.10...v1.0.11) (2026-10-26)
+# [1.0.12](https://github.com/stvekoulo/tvnest/compare/v1.0.10...v1.0.12) (2026-10-26)
 
 ### Fixes
 
