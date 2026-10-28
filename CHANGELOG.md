@@ -11,6 +11,12 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.0.17](https://github.com/stvekoulo/tvnest/compare/v1.0.16...v1.0.17) (2026-10-28)
+
+### Features
+
+- **ui** — The Sources page now shows each Xtream subscription's status: days left before it expires, the end date, connections in use and trial accounts. Expired accounts, and those expiring within a week, stand out.
+
 # [1.0.16](https://github.com/stvekoulo/tvnest/compare/v1.0.15...v1.0.16) (2026-10-26)
 
 ### Fixes

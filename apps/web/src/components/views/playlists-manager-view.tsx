@@ -1,5 +1,6 @@
 // Gestionnaire réel des sources IPTV TVNest (M3U, Xtream Codes, Stalker MAC) avec compteurs SQLite.
 import {
+  CalendarClock,
   CheckCircle2,
   FolderOpen,
   Globe,
@@ -11,8 +12,54 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
 import { TvNestLogo } from '@/components/shell/tvnest-logo';
+import { type AccountState, useXtreamAccounts } from '@/hooks/use-xtream-accounts';
 import { cn } from '@/lib/utils';
+import { describeExpiry } from '@/services/xtream-request.service';
 import type { PortalKind, UnifiedPlaylist } from '@/types/iptv.types';
+
+// Abonnement Xtream : jours restants, date de fin, connexions utilisées.
+function SourceSubscription({ state }: { state: AccountState | undefined }) {
+  if (state === undefined || state === 'loading') {
+    return <p className="mt-3 text-[11px] text-muted-foreground">Vérification de l'abonnement…</p>;
+  }
+  if (state === 'error' || state === null) {
+    return (
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        {state === 'error' ? 'Abonnement : serveur injoignable.' : 'Abonnement : non communiqué par le serveur.'}
+      </p>
+    );
+  }
+  const expiry = describeExpiry(state);
+  const connections =
+    state.maxConnections !== null ? `${state.activeConnections ?? 0} / ${state.maxConnections} connexion(s)` : null;
+  return (
+    <div className="mt-3 space-y-1 text-[11px] text-muted-foreground">
+      <p className="flex items-center gap-1.5">
+        <CalendarClock className="size-3.5 shrink-0" />
+        <span
+          className={cn(
+            'font-bold',
+            expiry.tone === 'expired'
+              ? 'rounded-md border border-rose-500/35 bg-rose-500/15 px-1.5 text-rose-400'
+              : expiry.tone === 'soon'
+                ? 'text-rose-400'
+                : 'text-foreground'
+          )}
+        >
+          {expiry.label}
+        </span>
+        {expiry.date ? <span>· {expiry.tone === 'expired' ? 'le' : "jusqu'au"} {expiry.date}</span> : null}
+      </p>
+      {connections || state.trial ? (
+        <p className="pl-5">
+          {connections}
+          {connections && state.trial ? ' · ' : null}
+          {state.trial ? "Compte d'essai" : null}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 interface PlaylistsManagerViewProps {
   playlists: UnifiedPlaylist[];
@@ -60,6 +107,7 @@ export function PlaylistsManagerView({
   onDeletePlaylist,
   onOpenAddSource,
 }: PlaylistsManagerViewProps) {
+  const accounts = useXtreamAccounts(playlists);
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-border bg-card p-6">
@@ -158,6 +206,8 @@ export function PlaylistsManagerView({
                       </span>
                     </div>
                   ) : null}
+
+                  {pl.kind === 'xtream' ? <SourceSubscription state={accounts[pl.id]} /> : null}
                 </div>
 
                 <div className="mt-5 flex items-center justify-between border-t border-border pt-3.5">

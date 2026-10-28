@@ -406,6 +406,40 @@ test('adding an Xtream source explains refusals instead of "[object Object]"', a
     delete globalThis.window;
 });
 
+test('Xtream sources show days left, end date and connections', async () => {
+    const { fetchXtreamAccount, describeExpiry } = await loadSource('apps/web/src/services/xtream-request.service.ts');
+    const now = Date.UTC(2026, 9, 28, 12);
+    const day = 86_400_000;
+    assert.equal(describeExpiry({ status: 'active', expiresAt: now + 12 * day }, now).label, 'Expire dans 12 jours');
+    assert.equal(describeExpiry({ status: 'active', expiresAt: now + 5 * day }, now).tone, 'soon');
+    assert.equal(describeExpiry({ status: 'active', expiresAt: now + 3600_000 }, now).label, 'Expire dans 1 jour');
+    assert.equal(describeExpiry({ status: 'active', expiresAt: now - day }, now).tone, 'expired');
+    assert.equal(describeExpiry({ status: 'expired', expiresAt: null }, now).label, 'Expiré');
+    assert.equal(describeExpiry({ status: 'active', expiresAt: null }, now).label, 'Sans date de fin');
+
+    globalThis.window = {
+        setTimeout,
+        clearTimeout,
+        electron: {
+            xtreamRequest: async () => ({
+                payload: { user_info: { status: 'Active', exp_date: '1793188800', is_trial: '0', active_cons: '1', max_connections: '2' } },
+            }),
+        },
+    };
+    assert.deepEqual(await fetchXtreamAccount('http://x', { username: 'u', password: 'p' }), {
+        status: 'active',
+        expiresAt: 1793188800000,
+        activeConnections: 1,
+        maxConnections: 2,
+        trial: false,
+    });
+    window.electron.xtreamRequest = async () => ({ payload: { user_info: { status: 'Active', exp_date: null, max_connections: '' } } });
+    const unlimited = await fetchXtreamAccount('http://x', { username: 'u', password: 'p' });
+    assert.equal(unlimited.expiresAt, null);
+    assert.equal(unlimited.maxConnections, null);
+    delete globalThis.window;
+});
+
 test('a hanging series request is abandoned, cancelled and resent', async () => {
     const { requestXtreamQuick } = await loadSource('apps/web/src/services/xtream-request.service.ts');
     const sessions = [];

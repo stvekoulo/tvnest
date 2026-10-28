@@ -87,6 +87,58 @@ interface XtreamUserInfo {
   auth?: number | string;
   status?: string;
   exp_date?: string | number | null;
+  is_trial?: string | number;
+  active_cons?: string | number;
+  max_connections?: string | number;
+}
+
+export interface XtreamAccount {
+  status: string;
+  /** Millisecondes ; null = sans date de fin (illimité). */
+  expiresAt: number | null;
+  activeConnections: number | null;
+  maxConnections: number | null;
+  trial: boolean;
+}
+
+const toCount = (value: unknown): number | null => {
+  const n = Number(value);
+  return value === '' || value == null || !Number.isFinite(n) ? null : n;
+};
+
+/** Abonnement d'une source Xtream : statut, date de fin, connexions. */
+export async function fetchXtreamAccount(
+  url: string,
+  creds: { username: string; password: string }
+): Promise<XtreamAccount | null> {
+  const payload = (await requestXtreamQuick(url, creds)) as { user_info?: XtreamUserInfo } | null;
+  const info = payload?.user_info;
+  if (!info) return null;
+  const exp = Number(info.exp_date);
+  return {
+    status: (info.status || '').toLowerCase(),
+    expiresAt: exp > 0 ? exp * 1000 : null,
+    activeConnections: toCount(info.active_cons),
+    maxConnections: toCount(info.max_connections),
+    trial: Number(info.is_trial) === 1,
+  };
+}
+
+const DAY_MS = 86_400_000;
+
+/** « Expire dans 12 jours » et son niveau d'alerte. */
+export function describeExpiry(
+  account: Pick<XtreamAccount, 'status' | 'expiresAt'>,
+  now = Date.now()
+): { label: string; date: string | null; tone: 'ok' | 'soon' | 'expired' } {
+  const date = account.expiresAt ? new Date(account.expiresAt).toLocaleDateString('fr-FR') : null;
+  if (account.status === 'expired' || (account.expiresAt !== null && account.expiresAt <= now)) {
+    return { label: 'Expiré', date, tone: 'expired' };
+  }
+  if (account.expiresAt === null) return { label: 'Sans date de fin', date, tone: 'ok' };
+  const days = Math.ceil((account.expiresAt - now) / DAY_MS);
+  const label = days === 1 ? 'Expire dans 1 jour' : `Expire dans ${days} jours`;
+  return { label, date, tone: days <= 7 ? 'soon' : 'ok' };
 }
 
 /** Vérifie le compte avant tout import : identifiants, abonnement expiré ou suspendu. */
