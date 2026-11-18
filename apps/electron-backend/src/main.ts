@@ -1,5 +1,5 @@
-// Sélection du profil avant l'initialisation d'electron-conf.
-import './app/services/electron-profile-bootstrap';
+// Initialisation précoce du profil TVNest avant l'import d'electron-conf (store.service).
+import './app/services/tvnest-early-init';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
@@ -37,21 +37,11 @@ import { isEmbeddedMpvFeatureEnabled } from './app/services/embedded-mpv-runtime
 import { runEmbeddedMpvRuntimeDiagnosticOrContinue } from './app/services/embedded-mpv-runtime-diagnostic';
 import { acquireSingleInstanceLock } from './app/services/single-instance';
 import {
-    separateTvnestDatabase,
-    separateTvnestProfile,
-} from './app/services/tvnest-data-separation';
-import {
     createPlaylistOpenRequest,
     extractPlaylistOpenRequestsFromArgv,
     playlistOpenRequests,
 } from './app/services/playlist-open-request';
 import { EMBEDDED_MPV_FRAME_COPY, store } from './app/services/store.service';
-
-// Profil et base propres à TVNest (%APPDATA%\TVNest, ~/.tvnest) ; les données partagées
-// avec IPTVnator jusqu'à la 1.0.2 sont copiées une seule fois, avant toute ouverture.
-app.setName('TVNest');
-separateTvnestProfile(app.getPath('appData'), app.getPath('userData'));
-separateTvnestDatabase();
 
 traceStartupPhase('compile-cache', () => readCompileCacheOutcome());
 countMainProcessSqlStatements(
@@ -74,11 +64,12 @@ if (
     app.commandLine.appendSwitch('ozone-platform', 'x11');
 }
 
-// Active par défaut le moteur libmpv frame-copy (WebGL2 canvas) s'il est disponible.
+// Le mode frame-copy reste strictement opt-in (false par défaut) afin de conserver
+// le sandbox Chromium actif par défaut sur la fenêtre principale (HWND natif sous Windows).
 if (
     isEmbeddedMpvFeatureEnabled() &&
     shouldPromotePersistedFrameCopyOptIn(
-        store.get(EMBEDDED_MPV_FRAME_COPY, true),
+        store.get(EMBEDDED_MPV_FRAME_COPY, false),
         process.env.IPTVNATOR_ENABLE_EMBEDDED_MPV_FRAME_COPY,
         isFrameCopyRuntimeUsable
     )

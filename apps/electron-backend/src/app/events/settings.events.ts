@@ -18,7 +18,6 @@ import {
     VLC_PLAYER_ARGUMENTS,
     VLC_REUSE_INSTANCE,
 } from '../services/store.service';
-import { httpServer } from '../server/http-server';
 import { setHostConnectivityGuardEnabled } from '../util/host-connectivity-guard';
 import { applyParentalLockState } from './parental-lock.events';
 import { persistAppUpdateChannel } from '../services/app-update-channel';
@@ -114,26 +113,5 @@ ipcMain.handle('SETTINGS_UPDATE', (_event, arg) => {
     // exists; a change re-points the running updater immediately.
     if (arg.updateChannel !== undefined) {
         persistAppUpdateChannel(arg.updateChannel);
-    }
-
-    // Handle remote control settings
-    if (
-        arg.remoteControl !== undefined ||
-        arg.remoteControlPort !== undefined
-    ) {
-        const enabled = arg.remoteControl ?? store.get('remoteControl', false);
-        const port =
-            arg.remoteControlPort ?? store.get('remoteControlPort', 8765);
-
-        // Save to store
-        if (arg.remoteControl !== undefined) {
-            store.set('remoteControl', enabled);
-        }
-        if (arg.remoteControlPort !== undefined) {
-            store.set('remoteControlPort', port);
-        }
-
-        // Update HTTP server
-        httpServer.updateSettings(enabled, port);
     }
 });

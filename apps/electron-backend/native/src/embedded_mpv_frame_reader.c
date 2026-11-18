@@ -124,14 +124,32 @@ static napi_value Open(napi_env env, napi_callback_info info) {
 #endif
 
     FrameShmHeader* header = (FrameShmHeader*)mapped;
-    if (header->magic != FRAME_SHM_MAGIC ||
-        header->version != FRAME_SHM_VERSION) {
+    const uint32_t magic = header->magic;
+    const uint32_t version = header->version;
+    const uint32_t width = header->width;
+    const uint32_t height = header->height;
+    const uint32_t stride = header->stride;
+    const uint32_t frame_bytes = header->frame_bytes;
+    const uint32_t data_offset = header->data_offset;
+    const uint32_t generation = header->generation;
+    if (magic != FRAME_SHM_MAGIC || version != FRAME_SHM_VERSION) {
 #if defined(_WIN32)
         UnmapViewOfFile(mapped);
 #else
         munmap(mapped, segment_size);
 #endif
         return throw_error(env, "frame ring not initialized yet");
+    }
+    if (frame_bytes == 0 || data_offset < sizeof(FrameShmHeader) ||
+        (size_t)data_offset > segment_size ||
+        (size_t)frame_bytes >
+            (segment_size - (size_t)data_offset) / FRAME_SHM_RING_SLOTS) {
+#if defined(_WIN32)
+        UnmapViewOfFile(mapped);
+#else
+        munmap(mapped, segment_size);
+#endif
+        return throw_error(env, "frame ring geometry exceeds segment bounds");
     }
 
     unmap_current();
@@ -141,11 +159,11 @@ static napi_value Open(napi_env env, napi_callback_info info) {
 
     napi_value result;
     napi_create_object(env, &result);
-    set_named_double(env, result, "width", header->width);
-    set_named_double(env, result, "height", header->height);
-    set_named_double(env, result, "stride", header->stride);
-    set_named_double(env, result, "frameBytes", (double)header->frame_bytes);
-    set_named_double(env, result, "generation", header->generation);
+    set_named_double(env, result, "width", width);
+    set_named_double(env, result, "height", height);
+    set_named_double(env, result, "stride", stride);
+    set_named_double(env, result, "frameBytes", (double)frame_bytes);
+    set_named_double(env, result, "generation", generation);
     return result;
 }
 
@@ -174,7 +192,16 @@ static napi_value CopyLatest(napi_env env, napi_callback_info info) {
                                   &destination_size) != napi_ok) {
         return throw_error(env, "argument must be an ArrayBuffer");
     }
-    if (destination_size < g_header->frame_bytes) {
+
+    const uint32_t frame_bytes = g_header->frame_bytes;
+    const uint32_t data_offset = g_header->data_offset;
+    if (frame_bytes == 0 || data_offset < sizeof(FrameShmHeader) ||
+        (size_t)data_offset > g_size ||
+        (size_t)frame_bytes >
+            (g_size - (size_t)data_offset) / FRAME_SHM_RING_SLOTS) {
+        return throw_error(env, "frame ring bounds corrupted");
+    }
+    if (destination_size < (size_t)frame_bytes) {
         return throw_error(env, "buffer smaller than one frame");
     }
 
@@ -185,15 +212,15 @@ static napi_value CopyLatest(napi_env env, napi_callback_info info) {
         atomic_load_explicit(&g_header->latest_seq, memory_order_acquire);
     if (seq == 0) return null_value;
 
-    FrameShmSlot* slot = &g_header->slots[seq % FRAME_SHM_RING_SLOTS];
+    const size_t slot_index = (size_t)(seq % FRAME_SHM_RING_SLOTS);
+    FrameShmSlot* slot = &g_header->slots[slot_index];
     if (atomic_load_explicit(&slot->seq, memory_order_acquire) != seq) {
         return null_value; /* writer is racing this slot; next tick wins */
     }
 
-    const uint8_t* source = g_base + g_header->data_offset +
-                            (seq % FRAME_SHM_RING_SLOTS) *
-                                g_header->frame_bytes;
-    memcpy(destination, source, (size_t)g_header->frame_bytes);
+    const uint8_t* source =
+        g_base + (size_t)data_offset + slot_index * (size_t)frame_bytes;
+    memcpy(destination, source, (size_t)frame_bytes);
     const uint64_t copied_at = now_ns();
     const int torn =
         atomic_load_explicit(&slot->seq, memory_order_acquire) != seq;

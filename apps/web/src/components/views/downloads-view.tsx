@@ -1,5 +1,14 @@
 // Gestionnaire réel des Téléchargements VOD et Enregistrements Live TV TVNest.
-import { Download, FolderOpen, Pause, Play, Radio, Square, Trash2 } from 'lucide-react';
+import {
+  Download,
+  FolderOpen,
+  Pause,
+  Play,
+  Radio,
+  RotateCw,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
@@ -21,6 +30,16 @@ export function DownloadsView({ downloads, recordings, onRefresh }: DownloadsVie
     if (!isElectronRuntime()) return;
     await fn();
     onRefresh();
+  };
+
+  const resumeDownload = async (downloadId: number) => {
+    const folder = await window.electron.downloadsGetDefaultFolder();
+    await window.electron.downloadsResume(downloadId, folder);
+  };
+
+  const retryDownload = async (downloadId: number) => {
+    const folder = await window.electron.downloadsGetDefaultFolder();
+    await window.electron.downloadsRetry(downloadId, folder);
   };
 
   return (
@@ -90,6 +109,7 @@ export function DownloadsView({ downloads, recordings, onRefresh }: DownloadsVie
                     <p className="mt-1 text-xs text-muted-foreground">
                       {formatBytes(dl.bytesDownloaded)}
                       {dl.totalBytes ? ` / ${formatBytes(dl.totalBytes)} (${pct}%)` : ''}
+                      {dl.errorMessage ? ` · ${dl.errorMessage}` : ''}
                     </p>
                     <div className="mt-2 h-1.5 w-full max-w-md overflow-hidden rounded-full bg-muted">
                       <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
@@ -101,9 +121,28 @@ export function DownloadsView({ downloads, recordings, onRefresh }: DownloadsVie
                       <Button
                         size="icon-sm"
                         variant="secondary"
+                        aria-label="Mettre en pause"
                         onClick={() => runDlAction(() => window.electron.downloadsPause(dl.id))}
                       >
                         <Pause className="size-3.5" />
+                      </Button>
+                    ) : null}
+                    {dl.status === 'paused' ? (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => runDlAction(() => resumeDownload(dl.id))}
+                      >
+                        <Play className="size-3.5 fill-current" /> Reprendre
+                      </Button>
+                    ) : null}
+                    {dl.status === 'failed' ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => runDlAction(() => retryDownload(dl.id))}
+                      >
+                        <RotateCw className="size-3.5" /> Réessayer
                       </Button>
                     ) : null}
                     {dl.filePath && dl.status === 'completed' ? (
@@ -120,6 +159,7 @@ export function DownloadsView({ downloads, recordings, onRefresh }: DownloadsVie
                         <Button
                           size="icon-sm"
                           variant="secondary"
+                          aria-label="Afficher dans le dossier"
                           onClick={() =>
                             runDlAction(() => window.electron.downloadsRevealFile(dl.filePath!))
                           }
@@ -131,6 +171,7 @@ export function DownloadsView({ downloads, recordings, onRefresh }: DownloadsVie
                     <Button
                       size="icon-sm"
                       variant="ghost"
+                      aria-label="Supprimer le téléchargement"
                       onClick={() =>
                         runDlAction(() =>
                           dl.status === 'downloading'
@@ -160,7 +201,7 @@ export function DownloadsView({ downloads, recordings, onRefresh }: DownloadsVie
             recordings.map((rec) => (
               <div
                 key={rec.id}
-                className="flex items-center justify-between gap-4 rounded-[24px] border border-border bg-card p-4"
+                className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-border bg-card p-4"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-foreground">
@@ -182,17 +223,43 @@ export function DownloadsView({ downloads, recordings, onRefresh }: DownloadsVie
                       <Square className="size-3" /> Stop
                     </Button>
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={() =>
-                        runDlAction(
-                          () => window.electron.recordingsPlayFile?.(rec.filePath) || Promise.resolve()
-                        )
-                      }
-                    >
-                      <Play className="size-3.5" /> Lire
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() =>
+                          runDlAction(
+                            () => window.electron.recordingsPlayFile?.(rec.filePath) || Promise.resolve()
+                          )
+                        }
+                      >
+                        <Play className="size-3.5 fill-current" /> Lire
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="secondary"
+                        aria-label="Afficher l'enregistrement"
+                        onClick={() =>
+                          runDlAction(
+                            () => window.electron.recordingsRevealFile?.(rec.filePath) || Promise.resolve()
+                          )
+                        }
+                      >
+                        <FolderOpen className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Supprimer l'enregistrement"
+                        onClick={() =>
+                          runDlAction(
+                            () => window.electron.recordingsRemove?.(rec.id) || Promise.resolve()
+                          )
+                        }
+                      >
+                        <Trash2 className="size-3.5 text-rose-500" />
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>

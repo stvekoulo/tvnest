@@ -9,8 +9,6 @@ import type {
     ElectronBridgePlayerError,
     ElectronBridgePlaylistFetchOptions,
     ElectronBridgePlaylistOpenRequest,
-    ElectronBridgeRemoteControlCommand,
-    ElectronBridgeRemoteControlStatus,
     ElectronBridgeWindowState,
     EmbeddedMpvSession,
     ExternalPlayerSession,
@@ -48,8 +46,6 @@ export const frameZoomPorts = {
 export type PreloadWindowEventsSlice = Pick<
     ElectronBridgeApi,
     | 'onChannelChange'
-    | 'onRemoteControlCommand'
-    | 'updateRemoteControlStatus'
     | 'onPlayerError'
     | 'onPortalDebugEvent'
     | 'onEpgProgress'
@@ -100,16 +96,10 @@ export const preloadWindowEventsApi: PreloadWindowEventsSlice = {
         ipcRenderer.on('CHANNEL_CHANGE', h);
         return () => ipcRenderer.off('CHANNEL_CHANGE', h);
     },
-    onRemoteControlCommand: (cb: (d: ElectronBridgeRemoteControlCommand) => void) => {
-        const h = (_e: Electron.IpcRendererEvent, d: ElectronBridgeRemoteControlCommand) => cb(d);
-        ipcRenderer.on('REMOTE_CONTROL_COMMAND', h);
-        return () => ipcRenderer.off('REMOTE_CONTROL_COMMAND', h);
-    },
-    updateRemoteControlStatus: (status: ElectronBridgeRemoteControlStatus) => {
-        ipcRenderer.send('REMOTE_CONTROL_STATUS_UPDATE', status);
-    },
     onPlayerError: (cb: (d: ElectronBridgePlayerError) => void) => {
-        ipcRenderer.on('player-error', (_e, d) => cb(d));
+        const h = (_e: Electron.IpcRendererEvent, d: ElectronBridgePlayerError) => cb(d);
+        ipcRenderer.on('player-error', h);
+        return () => ipcRenderer.off('player-error', h);
     },
     onPortalDebugEvent: (cb: (d: PortalDebugEvent) => void) => {
         const h = (_e: Electron.IpcRendererEvent, d: PortalDebugEvent) => cb(d);
@@ -117,7 +107,9 @@ export const preloadWindowEventsApi: PreloadWindowEventsSlice = {
         return () => ipcRenderer.off('PORTAL_DEBUG_EVENT', h);
     },
     onEpgProgress: (cb: (d: ElectronBridgeEpgProgress) => void) => {
-        ipcRenderer.on('EPG_PROGRESS_UPDATE', (_e, d) => cb(d));
+        const h = (_e: Electron.IpcRendererEvent, d: ElectronBridgeEpgProgress) => cb(d);
+        ipcRenderer.on('EPG_PROGRESS_UPDATE', h);
+        return () => ipcRenderer.off('EPG_PROGRESS_UPDATE', h);
     },
     onPlaybackPositionUpdate: (cb: (d: PlaybackPositionData) => void) => {
         const h = (_e: Electron.IpcRendererEvent, d: PlaybackPositionData) => cb(d);

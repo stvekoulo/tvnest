@@ -222,30 +222,31 @@ async function getContentIdentityMap(
         return new Map();
     }
 
-    const content = await db
-        .select({
-            id: schema.content.id,
-            xtreamId: schema.content.xtreamId,
-            contentType: schema.content.type,
-        })
-        .from(schema.content)
-        .innerJoin(
-            schema.categories,
-            eq(schema.content.categoryId, schema.categories.id)
-        )
-        .where(
-            and(
-                eq(schema.categories.playlistId, playlistId),
-                inArray(schema.content.xtreamId, xtreamIds)
+    const map = new Map<string, number>();
+    for (const chunk of chunkValues(xtreamIds, 500)) {
+        const content = await db
+            .select({
+                id: schema.content.id,
+                xtreamId: schema.content.xtreamId,
+                contentType: schema.content.type,
+            })
+            .from(schema.content)
+            .innerJoin(
+                schema.categories,
+                eq(schema.content.categoryId, schema.categories.id)
             )
-        );
+            .where(
+                and(
+                    eq(schema.categories.playlistId, playlistId),
+                    inArray(schema.content.xtreamId, chunk)
+                )
+            );
+        for (const item of content as ContentIdentity[]) {
+            map.set(toContentIdentityKey(item.contentType, item.xtreamId), item.id);
+        }
+    }
 
-    return new Map(
-        content.map((item: ContentIdentity) => [
-            toContentIdentityKey(item.contentType, item.xtreamId),
-            item.id,
-        ])
-    );
+    return map;
 }
 
 export async function restoreXtreamUserData(

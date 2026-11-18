@@ -69,11 +69,17 @@ export function useThemeToggle({
       document as Document & {
         startViewTransition(cb: () => void): { finished: Promise<void> };
       }
-    ).startViewTransition(() => setTheme(next));
-
-    vt.finished.finally(() => {
-      delete root.dataset.beuiVt;
+    ).startViewTransition(() => {
+      root.classList.toggle('dark', next === 'dark');
+      root.style.colorScheme = next;
+      setTheme(next);
     });
+
+    vt.finished
+      .catch(() => {})
+      .finally(() => {
+        delete root.dataset.beuiVt;
+      });
   };
 
   return { isDark, toggle };

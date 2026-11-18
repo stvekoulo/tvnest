@@ -3,6 +3,7 @@ import * as schema from '@iptvnator/shared/database/schema';
 import { XTREAM_DATABASE_PERFORMANCE_PHASE } from '@iptvnator/shared/interfaces';
 import type { AppDatabase } from '../database.types';
 import { unlockedCategoryCondition } from '../parental-lock-state';
+import { chunkValues } from './operation-control';
 import type { DatabaseOperationPerformancePhaseCapture } from './performance-phase-capture';
 
 type XtreamCategoryInput = {
@@ -69,16 +70,18 @@ async function insertXtreamCategories(
     db: AppDatabase,
     values: XtreamCategoryValue[]
 ): Promise<void> {
-    await db
-        .insert(schema.categories)
-        .values(values)
-        .onConflictDoNothing({
-            target: [
-                schema.categories.playlistId,
-                schema.categories.type,
-                schema.categories.xtreamId,
-            ],
-        });
+    for (const chunk of chunkValues(values, 400)) {
+        await db
+            .insert(schema.categories)
+            .values(chunk)
+            .onConflictDoNothing({
+                target: [
+                    schema.categories.playlistId,
+                    schema.categories.type,
+                    schema.categories.xtreamId,
+                ],
+            });
+    }
 }
 
 export async function hasCategories(
@@ -222,11 +225,25 @@ export async function updateCategoryVisibility(
         return { success: true };
     }
 
+    for (const chunk of chunkValues(categoryIds, 500)) {
+        await db
+            .update(schema.categories)
+            .set({ hidden })
+            .where(inArray(schema.categories.id, chunk));
+    }
+
+    return { success: true };
+}
+
+export async function setCategoryLocked(
+    db: AppDatabase,
+    categoryId: number,
+    locked: boolean
+): Promise<{ success: boolean }> {
     await db
         .update(schema.categories)
-        .set({ hidden })
-        .where(inArray(schema.categories.id, categoryIds));
-
+        .set({ locked })
+        .where(eq(schema.categories.id, categoryId));
     return { success: true };
 }
 
@@ -258,12 +275,14 @@ export async function setCategoryLocks(
         db.update(schema.categories).set({ locked: false }).where(scope).run();
 
         if (lockedIds.length > 0) {
-            db.update(schema.categories)
-                .set({ locked: true })
-                .where(
-                    and(scope, inArray(schema.categories.xtreamId, lockedIds))
-                )
-                .run();
+            for (const chunk of chunkValues(lockedIds, 500)) {
+                db.update(schema.categories)
+                    .set({ locked: true })
+                    .where(
+                        and(scope, inArray(schema.categories.xtreamId, chunk))
+                    )
+                    .run();
+            }
         }
     });
 

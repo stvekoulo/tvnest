@@ -43,6 +43,7 @@ jest.mock('../../database/connection', () => ({
 }));
 
 async function importDatabaseEventModules(): Promise<void> {
+    await import('./catalog-filter.events');
     await import('./category.events');
     await import('./content.events');
     await import('./favorites.events');

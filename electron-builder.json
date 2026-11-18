@@ -32,11 +32,6 @@
         "output": "dist/executables"
     },
     "files": [
-        {
-            "from": "dist/apps/remote-control-web",
-            "to": "remote-control-web",
-            "filter": ["**/*"]
-        },
         "electron-backend/**/*",
         "!electron-backend/native{,/**/*}",
         "web/**/*",
@@ -142,8 +137,8 @@
         ],
         "files": [
             [
-                "apps/electron-backend/linux/com.fourgray.iptvnator.metainfo.xml",
-                "/share/metainfo/com.fourgray.iptvnator.metainfo.xml"
+                "apps/electron-backend/linux/app.tvnest.desktop.metainfo.xml",
+                "/share/metainfo/app.tvnest.desktop.metainfo.xml"
             ]
         ]
     },

@@ -14,7 +14,7 @@ export function buildEpisodeMedia(series: UnifiedMedia, ep: SeriesEpisode): Unif
     playlistTitle: series.playlistTitle,
     portalKind: series.portalKind,
     kind: 'episode',
-    title: `${series.title} · S${ep.seasonNum}E${ep.episodeNum} — ${ep.title}`,
+    title: `${series.title} · S${ep.seasonNum}E${ep.episodeNum} · ${ep.title}`,
     category: series.category,
     posterUrl: ep.posterUrl || series.posterUrl,
     backdropUrl: ep.posterUrl || series.backdropUrl,

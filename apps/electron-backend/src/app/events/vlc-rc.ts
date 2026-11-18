@@ -1,6 +1,19 @@
 import { createConnection } from 'net';
+import {
+    assertSafePlaybackUrl,
+    sanitizePlayerTextValue,
+} from '../util/playback-url-guard';
 import { buildHttpHeaderFields } from './external-player-playback-request';
 import { ExternalPlaybackSnapshot } from './external-player-runtime';
+
+function sanitizeVlcOptionValue(value?: string): string | undefined {
+    const cleaned = sanitizePlayerTextValue(value);
+    if (!cleaned) {
+        return undefined;
+    }
+    // VLC RC splits inline per-input options on whitespace followed by `:key=`.
+    return cleaned.replace(/\s+:([A-Za-z0-9_-]+=)/g, ' $1');
+}
 
 export function buildVlcEnqueueCommands(options: {
     url: string;
@@ -11,6 +24,7 @@ export function buildVlcEnqueueCommands(options: {
     headers?: Record<string, string>;
     startTime?: number;
 }): string[] {
+    const safeUrl = assertSafePlaybackUrl(options.url);
     const inputOptions: string[] = [];
 
     // The reused process was launched with a global `--start-time=<resume>`,
@@ -24,27 +38,35 @@ export function buildVlcEnqueueCommands(options: {
             : 0;
     inputOptions.push(`:start-time=${startTime}`);
 
-    if (options.userAgent) {
-        inputOptions.push(`:http-user-agent=${options.userAgent}`);
+    const safeUserAgent = sanitizeVlcOptionValue(options.userAgent);
+    const safeReferer = sanitizeVlcOptionValue(options.referer);
+    const safeOrigin = sanitizeVlcOptionValue(options.origin);
+    const safeTitle = sanitizeVlcOptionValue(options.title);
+
+    if (safeUserAgent) {
+        inputOptions.push(`:http-user-agent=${safeUserAgent}`);
     }
-    if (options.referer) {
-        inputOptions.push(`:http-referrer=${options.referer}`);
-    } else if (options.origin) {
-        inputOptions.push(`:http-referrer=${options.origin}`);
+    if (safeReferer) {
+        inputOptions.push(`:http-referrer=${safeReferer}`);
+    } else if (safeOrigin) {
+        inputOptions.push(`:http-referrer=${safeOrigin}`);
     }
     // Same field list MPV sends: a real `Origin: ...` header (unless the
     // headers map already carries one) plus every non-empty custom header.
-    buildHttpHeaderFields(options.origin, options.headers).forEach((field) => {
-        inputOptions.push(`:http-header=${field}`);
+    buildHttpHeaderFields(safeOrigin, options.headers).forEach((field) => {
+        const safeField = sanitizeVlcOptionValue(field);
+        if (safeField) {
+            inputOptions.push(`:http-header=${safeField}`);
+        }
     });
-    if (options.title) {
-        inputOptions.push(`:meta-title=${options.title}`);
+    if (safeTitle) {
+        inputOptions.push(`:meta-title=${safeTitle}`);
     }
 
     const inputLine =
         inputOptions.length > 0
-            ? `${options.url} ${inputOptions.join(' ')}`
-            : options.url;
+            ? `${safeUrl} ${inputOptions.join(' ')}`
+            : safeUrl;
     const commands = ['clear', `add ${inputLine}`];
     if (startTime > 0) {
         commands.push(`seek ${startTime}`);
@@ -80,7 +102,13 @@ export function sendVlcRcCommand(
                 return;
             }
             try {
-                client.write(`${command}\n`);
+                const safeCommand = Array.from(command)
+                    .filter((ch) => {
+                        const c = ch.charCodeAt(0);
+                        return c !== 0 && c !== 10 && c !== 13;
+                    })
+                    .join('');
+                client.write(`${safeCommand}\n`);
                 onDispatched?.();
             } catch (error) {
                 finish(

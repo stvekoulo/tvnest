@@ -24,7 +24,7 @@ export * from './lib/embedded-mpv-extra-options.util';
 export * from './lib/external-player-session.interface';
 export * from './lib/global-search-result.interface';
 export * from './lib/host-connectivity.util';
-export * from './lib/indexed-db.config';
+export * from './lib/catalog-filter.interface';
 export * from './lib/ipc-command.class';
 export * from './lib/ipc-commands';
 export * from './lib/language.enum';

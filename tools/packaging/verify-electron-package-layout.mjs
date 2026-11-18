@@ -51,7 +51,7 @@ const flatpakMetainfoPath = path.join(
     'apps',
     'electron-backend',
     'linux',
-    'com.fourgray.iptvnator.metainfo.xml'
+    'app.tvnest.desktop.metainfo.xml'
 );
 const packageMetadata = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const electronBuilderConfig = JSON.parse(
@@ -71,7 +71,11 @@ const workerRelativeDir = path.join(
     'electron-backend',
     'workers'
 );
-const workerFiles = ['epg-parser.worker.js', 'database.worker.js'];
+const workerFiles = [
+    'epg-parser.worker.js',
+    'database.worker.js',
+    'playlist-refresh.worker.js',
+];
 const packagedPackageMetadata = buildElectronBuilderMetadata(
     packageMetadata,
     electronBuilderConfig
@@ -114,7 +118,7 @@ function getMacResourceDirs() {
             directory: path.join(
                 outputRoot,
                 'mac',
-                'IPTVnator.app',
+                'TVNest.app',
                 'Contents',
                 'Resources'
             ),
@@ -124,7 +128,7 @@ function getMacResourceDirs() {
             directory: path.join(
                 outputRoot,
                 'mac-arm64',
-                'IPTVnator.app',
+                'TVNest.app',
                 'Contents',
                 'Resources'
             ),

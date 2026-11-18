@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'child_process';
+import { redactSensitiveData } from '@iptvnator/shared/logging';
 import {
     sendPlayerErrorNotification,
     traceExternalPlayer,
@@ -37,8 +38,9 @@ export function attachMpvOutputHandlers(proc: ChildProcess): void {
                     output.includes('403') ||
                     output.includes('404')
                 ) {
-                    console.error('[MPV ERROR from stdout]:', output);
-                    sendPlayerErrorNotification('MPV', output);
+                    const redacted = String(redactSensitiveData(output));
+                    console.error('[MPV ERROR from stdout]:', redacted);
+                    sendPlayerErrorNotification('MPV', redacted);
                 }
             }
         });
@@ -48,7 +50,8 @@ export function attachMpvOutputHandlers(proc: ChildProcess): void {
         proc.stderr.on('data', (data) => {
             const output = data.toString().trim();
             if (output) {
-                console.error('[MPV stderr]:', output);
+                const redacted = String(redactSensitiveData(output));
+                console.error('[MPV stderr]:', redacted);
 
                 if (
                     output.includes('Failed to open') ||
@@ -60,8 +63,8 @@ export function attachMpvOutputHandlers(proc: ChildProcess): void {
                     output.includes('403') ||
                     output.includes('404')
                 ) {
-                    console.error('[MPV ERROR]:', output);
-                    sendPlayerErrorNotification('MPV', output);
+                    console.error('[MPV ERROR]:', redacted);
+                    sendPlayerErrorNotification('MPV', redacted);
                 }
             }
         });

@@ -2,6 +2,7 @@
 import { Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MediaSquircleCard } from '@/components/cards/media-squircle-card';
+import { Input } from '@/components/motion/input';
 import { Loader } from '@/components/motion/loader';
 import { searchAllSources } from '@/services/ipc-catalog.service';
 import type { EpgProgram, UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
@@ -15,6 +16,7 @@ const GROUPS: Array<{ kind: UnifiedMedia['kind']; title: string }> = [
 
 interface GlobalSearchViewProps {
   query: string;
+  onQueryChange?: (q: string) => void;
   playlists: UnifiedPlaylist[];
   epgByChannel: Record<string, EpgProgram | null>;
   onPlay: (item: UnifiedMedia) => void;
@@ -24,6 +26,7 @@ interface GlobalSearchViewProps {
 
 export function GlobalSearchView({
   query,
+  onQueryChange,
   playlists,
   epgByChannel,
   onPlay,
@@ -54,17 +57,37 @@ export function GlobalSearchView({
     };
   }, [term, playlists]);
 
+  const handleToggleFav = (item: UnifiedMedia) => {
+    setResults((prev) =>
+      prev.map((r) => (r.id === item.id ? { ...r, isFavorite: !r.isFavorite } : r))
+    );
+    onToggleFavorite(item);
+  };
+
   const multiSource = playlists.length > 1;
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-8 px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-      <div>
-        <h1 className="font-display text-xl font-extrabold tracking-tight text-foreground">
-          {term ? `Résultats pour « ${term} »` : 'Recherche'}
-        </h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Dans toutes les sources ({playlists.length}) : chaînes, films et séries.
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h1 className="font-display text-xl font-extrabold tracking-tight text-foreground">
+            {term ? `Résultats pour « ${term} »` : 'Recherche'}
+          </h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Dans toutes les sources ({playlists.length}) : chaînes, films et séries.
+          </p>
+        </div>
+        {onQueryChange ? (
+          <div className="md:hidden">
+            <Input
+              autoFocus
+              value={query}
+              onChange={onQueryChange}
+              placeholder="Rechercher chaîne, film, série..."
+              leftIcon={<Search />}
+            />
+          </div>
+        ) : null}
       </div>
 
       {term.length < 2 ? (
@@ -95,10 +118,10 @@ export function GlobalSearchView({
                   <div key={item.id} className="min-w-0 space-y-1.5">
                     <MediaSquircleCard
                       item={item}
-                      epg={item.tvgId ? epgByChannel[item.tvgId] : null}
+                      epg={epgByChannel[item.tvgId || item.title] ?? null}
                       onPlay={() => onPlay(item)}
                       onOpenDetail={item.kind !== 'live' ? () => onOpenDetail(item) : undefined}
-                      onToggleFavorite={() => onToggleFavorite(item)}
+                      onToggleFavorite={() => handleToggleFav(item)}
                     />
                     {multiSource ? (
                       <p className="truncate px-1 text-[10px] text-muted-foreground">{item.playlistTitle}</p>

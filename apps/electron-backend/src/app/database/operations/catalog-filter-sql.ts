@@ -1,12 +1,37 @@
 // Constructeur SQL paramétré (Drizzle) pour le filtrage et le tri rapide du catalogue.
 import { type SQL, sql } from 'drizzle-orm';
-import { getParentalLockActive } from '../../services/parental-lock-state';
+import { isParentalLockActive } from '../parental-lock-state';
 import {
     type CatalogFilterQuery,
     LANGUAGE_PATTERNS,
 } from './catalog-filter.types';
 
-// Construit l'expression SQL testant l'appartenance d'un flux ou groupe à une langue.
+const ADULT_PATTERNS = [
+    '%XXX%',
+    '%18+%',
+    '%+18%',
+    '%ADULT%',
+    '%PORN%',
+    '%EROTIC%',
+    '%EROTIQUE%',
+    '%NSFW%',
+    '%HENTAI%',
+    '%X-RATED%',
+];
+
+export function escapeSqlLike(raw: string): string {
+    return raw.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+export function buildAdultExclusionSql(includeContentTitle = true): SQL {
+    const checks = ADULT_PATTERNS.flatMap((pat) =>
+        includeContentTitle
+            ? [sql`cat.name NOT LIKE ${pat}`, sql`c.title NOT LIKE ${pat}`]
+            : [sql`cat.name NOT LIKE ${pat}`]
+    );
+    return sql`(${sql.join(checks, sql` AND `)})`;
+}
+
 export function buildLanguageMatchSql(langCode?: string): SQL | null {
     if (!langCode || langCode === 'ALL') return null;
     const patterns = LANGUAGE_PATTERNS[langCode.toUpperCase()];
@@ -18,7 +43,6 @@ export function buildLanguageMatchSql(langCode?: string): SQL | null {
     return sql`(${sql.join(checks, sql` OR `)})`;
 }
 
-// Variante pour la liste des groupes : seule la langue du nom du groupe compte.
 export function buildCategoryLanguageMatchSql(langCode?: string): SQL | null {
     if (!langCode || langCode === 'ALL') return null;
     const patterns = LANGUAGE_PATTERNS[langCode.toUpperCase()];
@@ -65,15 +89,51 @@ function buildYearSql(year?: string): SQL | null {
     return null;
 }
 
-// Assemble la clause WHERE complète pour les requêtes SQLite de `content` + `categories`.
+function buildSearchClauses(rawSearch: string): SQL[] {
+    const tokens = rawSearch
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 6);
+    if (tokens.length === 0) return [];
+
+    const ftsWords = tokens
+        .flatMap((t) => t.match(/[A-Za-z0-9\u00C0-\u024F]{3,}/g) ?? [])
+        .slice(0, 6);
+
+    const out: SQL[] = [];
+    if (ftsWords.length === tokens.length && ftsWords.length > 0) {
+        const ftsMatch = ftsWords
+            .map((w) => `"${w.replace(/"/g, '""')}"*`)
+            .join(' AND ');
+        const catChecks = tokens.map((token) => {
+            const like = `%${escapeSqlLike(token)}%`;
+            return sql`(cat.name LIKE ${like} ESCAPE '\\' OR COALESCE(c.original_title, '') LIKE ${like} ESCAPE '\\')`;
+        });
+        out.push(
+            sql`(c.id IN (SELECT rowid FROM content_title_fts WHERE content_title_fts MATCH ${ftsMatch}) OR (${sql.join(catChecks, sql` AND `)}))`
+        );
+        return out;
+    }
+
+    for (const token of tokens) {
+        const like = `%${escapeSqlLike(token)}%`;
+        out.push(
+            sql`(c.title LIKE ${like} ESCAPE '\\' OR COALESCE(c.original_title, '') LIKE ${like} ESCAPE '\\' OR cat.name LIKE ${like} ESCAPE '\\')`
+        );
+    }
+    return out;
+}
+
 export function buildCatalogWhereSql(query: CatalogFilterQuery): SQL {
     const clauses: SQL[] = [
         sql`cat.playlist_id = ${query.playlistId}`,
         sql`cat.hidden = 0`,
     ];
 
-    if (getParentalLockActive()) {
+    if (isParentalLockActive()) {
         clauses.push(sql`cat.locked = 0`);
+        clauses.push(buildAdultExclusionSql(true));
     }
 
     if (query.type && query.type !== 'all') {
@@ -85,17 +145,7 @@ export function buildCatalogWhereSql(query: CatalogFilterQuery): SQL {
     }
 
     if (query.search && query.search.trim().length > 0) {
-        const tokens = query.search
-            .trim()
-            .split(/\s+/)
-            .filter(Boolean)
-            .slice(0, 6);
-        for (const token of tokens) {
-            const like = `%${token}%`;
-            clauses.push(
-                sql`(c.title LIKE ${like} OR COALESCE(c.original_title, '') LIKE ${like} OR cat.name LIKE ${like})`
-            );
-        }
+        clauses.push(...buildSearchClauses(query.search));
     }
 
     const langSql = buildLanguageMatchSql(query.language);
@@ -105,7 +155,9 @@ export function buildCatalogWhereSql(query: CatalogFilterQuery): SQL {
     if (qualSql) clauses.push(qualSql);
 
     if (query.minRating && query.minRating > 0) {
-        clauses.push(sql`CAST(COALESCE(c.rating, '0') AS REAL) >= ${query.minRating}`);
+        clauses.push(
+            sql`CAST(COALESCE(c.rating, '0') AS REAL) >= ${query.minRating}`
+        );
     }
 
     const yearSql = buildYearSql(query.year);
@@ -113,7 +165,14 @@ export function buildCatalogWhereSql(query: CatalogFilterQuery): SQL {
 
     if (query.onlyFavorites) {
         clauses.push(
-            sql`EXISTS (SELECT 1 FROM favorites f2 WHERE f2.content_id = c.id AND f2.playlist_id = ${query.playlistId})`
+            sql`EXISTS (
+                SELECT 1 FROM favorites f2
+                WHERE f2.playlist_id = ${query.playlistId}
+                  AND (
+                      f2.content_id = c.id
+                      OR (f2.content_id IS NULL AND f2.type = c.type AND f2.xtream_id = c.xtream_id AND f2.identity_conflict = 0)
+                  )
+            )`
         );
     }
 
@@ -145,7 +204,6 @@ export function buildCatalogWhereSql(query: CatalogFilterQuery): SQL {
     return sql.join(clauses, sql` AND `);
 }
 
-// Assemble la clause ORDER BY avec priorité linguistique optionnelle.
 export function buildCatalogOrderBySql(query: CatalogFilterQuery): SQL {
     if (query.onlyHistory) {
         return sql`(SELECT MAX(rv2.viewed_at) FROM recently_viewed rv2 WHERE rv2.content_id = c.id AND rv2.playlist_id = ${query.playlistId}) DESC`;
@@ -154,7 +212,7 @@ export function buildCatalogOrderBySql(query: CatalogFilterQuery): SQL {
     const sortBy = query.sortBy || 'recommended';
     switch (sortBy) {
         case 'added_desc':
-            return sql`CAST(COALESCE(c.added, '0') AS INTEGER) DESC, c.id DESC`;
+            return sql`c.added DESC, c.id DESC`;
         case 'rating_desc':
             return sql`CAST(COALESCE(c.rating, '0') AS REAL) DESC, c.id DESC`;
         case 'title_asc':
@@ -167,9 +225,9 @@ export function buildCatalogOrderBySql(query: CatalogFilterQuery): SQL {
         default: {
             const prefSql = buildLanguageMatchSql(query.preferredLanguage);
             if (prefSql && (!query.language || query.language === 'ALL')) {
-                return sql`CASE WHEN ${prefSql} THEN 0 ELSE 1 END ASC, CAST(COALESCE(c.rating, '0') AS REAL) DESC, CAST(COALESCE(c.added, '0') AS INTEGER) DESC`;
+                return sql`CASE WHEN ${prefSql} THEN 0 ELSE 1 END ASC, CAST(COALESCE(c.rating, '0') AS REAL) DESC, c.added DESC`;
             }
-            return sql`CAST(COALESCE(c.rating, '0') AS REAL) DESC, CAST(COALESCE(c.added, '0') AS INTEGER) DESC, c.id ASC`;
+            return sql`CAST(COALESCE(c.rating, '0') AS REAL) DESC, c.added DESC, c.id ASC`;
         }
     }
 }

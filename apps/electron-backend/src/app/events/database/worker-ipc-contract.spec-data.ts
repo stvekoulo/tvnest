@@ -63,6 +63,13 @@ const vodSourcePin = {
     contentId: 42,
     portalType: 'xtream',
 };
+const catalogQuery = {
+    playlistId,
+    type: 'movie',
+    searchTerm: 'matrix',
+    limit: 50,
+    offset: 0,
+};
 
 export const workerIpcContractCases: WorkerIpcContractCase[] = [
     {
@@ -177,6 +184,31 @@ export const workerIpcContractCases: WorkerIpcContractCase[] = [
         operation: 'DB_SET_CATEGORY_LOCKS',
         args: [playlistId, 'live', categoryIds],
         payload: { playlistId, type: 'live', lockedXtreamIds: categoryIds },
+    },
+    {
+        operation: 'DB_SET_CATEGORY_LOCKED',
+        args: [10, true],
+        payload: { categoryId: 10, locked: true },
+    },
+    {
+        operation: 'DB_QUERY_CATALOG',
+        args: [catalogQuery],
+        payload: catalogQuery,
+    },
+    {
+        operation: 'DB_GET_CATEGORIES_WITH_COUNTS',
+        args: [playlistId, 'fr'],
+        payload: { playlistId, language: 'fr' },
+    },
+    {
+        operation: 'DB_GET_PLAYLIST_STREAM_COUNTS',
+        args: [],
+        payload: {},
+    },
+    {
+        operation: 'DB_GET_DASHBOARD_HIGHLIGHTS',
+        args: [playlistId, 'fr'],
+        payload: { playlistId, preferredLanguage: 'fr' },
     },
     {
         operation: 'DB_HAS_CONTENT',

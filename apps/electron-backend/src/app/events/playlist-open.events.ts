@@ -16,6 +16,7 @@ import {
     OPEN_FILE,
 } from '@iptvnator/shared/interfaces';
 import { playlistOpenRequests } from '../services/playlist-open-request';
+import { authorizePlaylistReadPath } from './playlist-read-authorization';
 
 export default class PlaylistOpenEvents {
     static bootstrapPlaylistOpenEvents(): Electron.IpcMain {
@@ -33,6 +34,7 @@ export default class PlaylistOpenEvents {
                 }
 
                 try {
+                    authorizePlaylistReadPath(request.filePath);
                     event.sender.send(OPEN_FILE, request);
                 } catch {
                     // The WebContents went away between the check and the

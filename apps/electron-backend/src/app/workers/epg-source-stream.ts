@@ -100,6 +100,9 @@ async function openRemoteEpgSource(
             decompress: false,
             method: 'GET',
             responseType: 'stream',
+            timeout: 30_000,
+            maxContentLength: 250 * 1024 * 1024,
+            maxBodyLength: 250 * 1024 * 1024,
         },
         {
             allowPrivateNetworks:

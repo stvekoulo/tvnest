@@ -1,13 +1,7 @@
 /**
- * Frame pump for the frame-copy embedded MPV engine.
- *
- * Runs inside the preload script (isolated world, full Node access — the
- * frame-copy experiment disables the window sandbox, see
- * getMainWindowWebPreferences). It loads the shm frame-reader addon, copies
- * the newest BGRA frame into a reused ArrayBuffer once per rAF, and uploads
- * it into a WebGL2 texture on the renderer's `<canvas
- * data-embedded-mpv-frame>` element. No frame data ever crosses the
- * contextBridge — the bridge only exposes attach/detach lifecycle calls.
+ * Frame pump for the frame-copy embedded MPV engine (preload isolated world).
+ * Copies the newest BGRA frame from the helper's shared-memory ring once per
+ * animation frame and uploads it into a WebGL2 texture on `<canvas data-embedded-mpv-frame>`.
  */
 import { ipcRenderer } from 'electron';
 import {
@@ -38,8 +32,6 @@ interface FrameReaderAddon {
     close(): void;
 }
 
-/* Webpack rewrites bare `require`; the addon must go through the runtime
- * require so the .node file is loaded by Node itself. */
 declare const __non_webpack_require__: NodeRequire | undefined;
 const nodeRequire: NodeRequire =
     typeof __non_webpack_require__ === 'function'
@@ -50,10 +42,6 @@ const CANVAS_SELECTOR = 'canvas[data-embedded-mpv-frame]';
 const ATTACH_TIMEOUT_MS = 5000;
 const ATTACH_POLL_MS = 100;
 
-// Note on orientation: the helper renders with MPV_RENDER_PARAM_FLIP_Y and
-// glReadPixels reads rows bottom-up, so the shm buffer arrives in texture
-// order already — sampling uses the un-flipped uv (a second flip here would
-// show the video upside down).
 const VERTEX_SHADER = `#version 300 es
 out vec2 v_uv;
 void main() {
@@ -72,11 +60,16 @@ void main() {
     o_color = vec4(c.b, c.g, c.r, 1.0);
 }`;
 
-interface PumpState {
+interface GlResources {
+    gl: WebGL2RenderingContext;
+    program: WebGLProgram;
+    vao: WebGLVertexArrayObject;
+    texture: WebGLTexture;
+}
+
+interface PumpState extends GlResources {
     sessionId: string;
     canvas: HTMLCanvasElement;
-    gl: WebGL2RenderingContext;
-    texture: WebGLTexture;
     reader: FrameReaderAddon;
     frame: Uint8Array;
     width: number;
@@ -87,11 +80,6 @@ interface PumpState {
 
 let pump: PumpState | null = null;
 let sourceListenerRegistered = false;
-/**
- * Monotonic attach epoch: bumped by every attach/detach. Async attach waits
- * re-check it after each await so a stale attach (for a session that was
- * replaced meanwhile) can never install itself over the active pump.
- */
 let attachEpoch = 0;
 
 export function copyStableLatestFrame(
@@ -100,11 +88,7 @@ export function copyStableLatestFrame(
     lastSeq: number
 ): FrameCopyResult | null {
     if (reader.latestSeq() <= lastSeq) return null;
-
     const result = reader.copyLatest(buffer);
-    // A torn memcpy raced the helper overwriting this ring slot. Keep the
-    // previous sequence so the next animation tick retries instead of
-    // uploading partially copied pixels or marking the frame consumed.
     return result && !result.torn ? result : null;
 }
 
@@ -115,9 +99,8 @@ function delay(ms: number): Promise<void> {
 async function waitForCanvas(): Promise<HTMLCanvasElement | null> {
     const deadline = Date.now() + ATTACH_TIMEOUT_MS;
     while (Date.now() < deadline) {
-        const canvas = document.querySelector<HTMLCanvasElement>(
-            CANVAS_SELECTOR
-        );
+        const canvas =
+            document.querySelector<HTMLCanvasElement>(CANVAS_SELECTOR);
         if (canvas) return canvas;
         await delay(ATTACH_POLL_MS);
     }
@@ -139,9 +122,18 @@ async function waitForFrameSource(
     return null;
 }
 
-function createGl(
-    canvas: HTMLCanvasElement
-): { gl: WebGL2RenderingContext; texture: WebGLTexture } | null {
+function destroyGlResources(res: Partial<GlResources> & { gl: WebGL2RenderingContext }): void {
+    const { gl, texture, vao, program } = res;
+    try {
+        if (texture) gl.deleteTexture(texture);
+        if (vao) gl.deleteVertexArray(vao);
+        if (program) gl.deleteProgram(program);
+    } catch {
+        // Ignore lost WebGL context errors on teardown.
+    }
+}
+
+function createGl(canvas: HTMLCanvasElement): GlResources | null {
     const gl = canvas.getContext('webgl2', {
         antialias: false,
         alpha: false,
@@ -150,12 +142,19 @@ function createGl(
     if (!gl) return null;
 
     const program = gl.createProgram();
+    if (!program) return null;
+
+    const shaders: WebGLShader[] = [];
     for (const [type, source] of [
         [gl.VERTEX_SHADER, VERTEX_SHADER],
         [gl.FRAGMENT_SHADER, FRAGMENT_SHADER],
     ] as const) {
         const shader = gl.createShader(type);
-        if (!shader) return null;
+        if (!shader) {
+            shaders.forEach((s) => gl.deleteShader(s));
+            gl.deleteProgram(program);
+            return null;
+        }
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
@@ -163,22 +162,43 @@ function createGl(
                 '[embedded-mpv-pump] shader error:',
                 gl.getShaderInfoLog(shader)
             );
+            gl.deleteShader(shader);
+            shaders.forEach((s) => gl.deleteShader(s));
+            gl.deleteProgram(program);
             return null;
         }
         gl.attachShader(program, shader);
+        shaders.push(shader);
     }
+
     gl.linkProgram(program);
+    shaders.forEach((s) => {
+        gl.detachShader(program, s);
+        gl.deleteShader(s);
+    });
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error(
+            '[embedded-mpv-pump] program link error:',
+            gl.getProgramInfoLog(program)
+        );
+        gl.deleteProgram(program);
+        return null;
+    }
+
     gl.useProgram(program);
     const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-
     const texture = gl.createTexture();
+    if (!vao || !texture) {
+        destroyGlResources({ gl, program, vao: vao ?? undefined, texture: texture ?? undefined });
+        return null;
+    }
+    gl.bindVertexArray(vao);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    return { gl, texture: texture as WebGLTexture };
+    return { gl, program, vao, texture };
 }
 
 function applySource(state: PumpState, source: EmbeddedMpvFrameSource): boolean {
@@ -256,17 +276,10 @@ export async function attachEmbeddedMpvFrameView(
     ensureSourceListener();
 
     const canvas = await waitForCanvas();
-    if (epoch !== attachEpoch) return false;
-    if (!canvas) {
-        console.error('[embedded-mpv-pump] frame canvas not found in DOM');
-        return false;
-    }
+    if (epoch !== attachEpoch || !canvas) return false;
+
     const source = await waitForFrameSource(sessionId);
-    if (epoch !== attachEpoch) return false;
-    if (!source) {
-        console.error('[embedded-mpv-pump] no frame source for', sessionId);
-        return false;
-    }
+    if (epoch !== attachEpoch || !source) return false;
 
     let reader: FrameReaderAddon;
     try {
@@ -277,16 +290,12 @@ export async function attachEmbeddedMpvFrameView(
     }
 
     const glSetup = createGl(canvas);
-    if (!glSetup) {
-        console.error('[embedded-mpv-pump] WebGL2 unavailable');
-        return false;
-    }
+    if (!glSetup) return false;
 
     const state: PumpState = {
+        ...glSetup,
         sessionId,
         canvas,
-        gl: glSetup.gl,
-        texture: glSetup.texture,
         reader,
         frame: new Uint8Array(0),
         width: 0,
@@ -295,6 +304,7 @@ export async function attachEmbeddedMpvFrameView(
         rafHandle: 0,
     };
     if (!applySource(state, source)) {
+        destroyGlResources(state);
         reader.close();
         return false;
     }
@@ -305,13 +315,14 @@ export async function attachEmbeddedMpvFrameView(
 }
 
 export function detachEmbeddedMpvFrameView(): void {
-    attachEpoch++; // aborts any attach still waiting on canvas/frame source
+    attachEpoch++;
     if (!pump) return;
     cancelAnimationFrame(pump.rafHandle);
+    destroyGlResources(pump);
     try {
         pump.reader.close();
     } catch {
-        // reader may already be gone with the helper; nothing to release
+        // Reader may already be gone with the helper.
     }
     pump = null;
 }

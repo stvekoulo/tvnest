@@ -21,6 +21,7 @@ import { EpgChannelMetadata } from './epg-channel-metadata.model';
 import { EpgProgram } from './epg-program.model';
 import {
     ExternalPlayerErrorCode,
+    ExternalPlayerName,
     ExternalPlayerSession,
 } from './external-player-session.interface';
 import {
@@ -958,9 +959,11 @@ export interface ElectronBridgeApi {
     ) => Promise<ElectronBridgeEpgSearchResult[]>;
 
     updateSettings: (settings: Partial<Settings>) => Promise<void>;
-    getAiSettings: () => Promise<ElectronBridgeAiSettings>;
     setMpvPlayerPath: (mpvPlayerPath: string) => Promise<void>;
     setVlcPlayerPath: (vlcPlayerPath: string) => Promise<void>;
+    selectExternalPlayerExecutable?: (
+        player: ExternalPlayerName
+    ) => Promise<string | null>;
     /**
      * The portal's JSON, the `{ stalkerAuthFailure }` marker, or a
      * `PortalRequestFailureEnvelope` (cancelled request, HTTP 401/403).
@@ -1106,6 +1109,10 @@ export interface ElectronBridgeApi {
         type: string,
         lockedXtreamIds: number[]
     ) => Promise<ElectronBridgeResult>;
+    dbSetCategoryLocked?: (
+        categoryId: number,
+        locked: boolean
+    ) => Promise<ElectronBridgeResult>;
     dbHasContent: (playlistId: string, type: string) => Promise<boolean>;
     dbGetContent: (
         playlistId: string,
@@ -1244,19 +1251,13 @@ export interface ElectronBridgeApi {
     onChannelChange?: (
         callback: (data: { direction: 'up' | 'down' }) => void
     ) => () => void;
-    onRemoteControlCommand?: (
-        callback: (data: ElectronBridgeRemoteControlCommand) => void
-    ) => () => void;
-    updateRemoteControlStatus?: (
-        status: ElectronBridgeRemoteControlStatus
-    ) => void;
     onPlayerError?: (
         callback: (data: ElectronBridgePlayerError) => void
-    ) => void;
+    ) => () => void;
     getLocalIpAddresses: () => Promise<string[]>;
     onEpgProgress?: (
         callback: (data: ElectronBridgeEpgProgress) => void
-    ) => void;
+    ) => () => void;
     onDbSaveContentProgress: (callback: (count: number) => void) => void;
     removeDbSaveContentProgress: () => void;
     onDbOperationEvent?: (

@@ -1,7 +1,0 @@
-@use 'source-tag' as tag;
-
-:host {
-    display: contents;
-}
-
-@include tag.source-tag-base;

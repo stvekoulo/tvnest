@@ -125,9 +125,13 @@ export async function transferToPartialFile(
                 method: 'GET',
                 responseType: 'stream',
                 signal: abortController.signal,
+                timeout: 45_000,
                 validateStatus: (status) => status >= 200 && status < 300,
             },
-            { allowPrivateNetworks: true }
+            {
+                allowPrivateNetworks: true,
+                allowPrivateNetworkRedirects: false,
+            }
         );
     } catch (error) {
         if (

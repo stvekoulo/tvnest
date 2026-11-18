@@ -43,7 +43,7 @@ test(
             buildLoadPlaybackCommand,
         } = mod.exports;
         const clip = readFileSync(
-            'apps/web-e2e/src/fixtures/playback/episode.webm'
+            'tools/testing/fixtures/episode.webm'
         );
         const requests = [];
         const server = createServer((req, res) => {

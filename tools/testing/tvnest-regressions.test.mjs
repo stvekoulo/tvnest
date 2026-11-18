@@ -545,3 +545,193 @@ test('switching back to a visited section shows it from cache, without a new que
         delete globalThis.__calls;
     }
 });
+
+test('Stalker portals import genres, renegotiate expired tokens, and attach scoped playback headers', async () => {
+    const { addStalkerPortal } = await loadSource(
+        'apps/web/src/services/ipc-stalker.service.ts',
+        {
+            '@/services/ipc-playlists.service': `
+              export const isElectronRuntime = () => true;
+              export const mapPlaylistToUnified = (p) => ({
+                id: p._id,
+                title: p.title,
+                kind: 'stalker',
+                url: p.url,
+                portalUrl: p.portalUrl,
+                macAddress: p.macAddress,
+                token: p.stalkerToken,
+                channelCount: p.count,
+              });`,
+        }
+    );
+    const { resolveMediaPlayback } = await loadSource(
+        'apps/web/src/services/ipc-playback.service.ts',
+        {
+            '@/services/ipc-playlists.service':
+                'export const isElectronRuntime = () => true; export const getFallbackRawPlaylist = () => null;',
+        }
+    );
+
+    const savedPlaylists = [];
+    const scopedHeaders = [];
+    let createLinkCalls = 0;
+
+    globalThis.window = {
+        electron: {
+            dbUpsertAppPlaylist: async (pl) => savedPlaylists.push(pl),
+            setUserAgent: async (ua, ref, scopeUrl, creds) => {
+                scopedHeaders.push({ ua, ref, scopeUrl, creds });
+                return true;
+            },
+            stalkerRequest: async ({ params, token }) => {
+                if (params.action === 'handshake') {
+                    return { js: { token: createLinkCalls > 0 ? 'fresh-tok' : 'init-tok' } };
+                }
+                if (params.action === 'get_genres') {
+                    return { js: [{ id: '10', title: 'Cinéma FR' }] };
+                }
+                if (params.action === 'get_all_channels') {
+                    return {
+                        js: {
+                            data: [
+                                {
+                                    id: '101',
+                                    name: 'Canal Ciné',
+                                    cmd: 'ffrt http://localhost/ch/101',
+                                    tv_genre_id: '10',
+                                },
+                            ],
+                        },
+                    };
+                }
+                if (params.action === 'create_link') {
+                    createLinkCalls += 1;
+                    if (token === 'init-tok') {
+                        return { stalkerAuthFailure: true };
+                    }
+                    return { js: { cmd: 'ffmpeg https://stream.stalker.test/live/101.ts?token=ok' } };
+                }
+                return {};
+            },
+        },
+    };
+
+    try {
+        const portal = await addStalkerPortal({
+            title: 'Mon Stalker',
+            portalUrl: 'http://portal.stalker.test/stalker_portal/c',
+            macAddress: '00:1a:79:aa:bb:cc',
+        });
+        assert.equal(savedPlaylists[0].playlist.items[0].group.title, 'Cinéma FR');
+        assert.equal(savedPlaylists[0].playlist.items[0].url, 'ffrt http://localhost/ch/101');
+
+        const resolved = await resolveMediaPlayback(
+            {
+                id: 'st-101',
+                playlistId: portal.id,
+                portalKind: 'stalker',
+                kind: 'live',
+                title: 'Canal Ciné',
+                category: 'Cinéma FR',
+                streamUrl: 'ffrt http://localhost/ch/101',
+            },
+            portal
+        );
+        assert.equal(resolved.streamUrl, 'https://stream.stalker.test/live/101.ts?token=ok');
+        assert.equal(resolved.headers.Authorization, 'Bearer fresh-tok');
+        assert.match(resolved.headers.Cookie, /^mac=00%3A1A%3A79%3AAA%3ABB%3ACC;/);
+        assert.equal(scopedHeaders[0].creds.authorization, 'Bearer fresh-tok');
+    } finally {
+        delete globalThis.window;
+    }
+});
+
+test('explicit restart (progressSeconds: 0) is never overwritten by saved DB position', async () => {
+    const { fetchXtreamMovieDetail } = await loadSource(
+        'apps/web/src/services/ipc-series.service.ts',
+        {
+            '@/services/ipc-playlists.service':
+                'export const isElectronRuntime = () => true; export const getFallbackRawPlaylist = () => null;',
+            '@/services/xtream-request.service':
+                'export const requestXtreamQuick = async () => ({ info: {}, movie_data: { container_extension: "mkv" } });',
+        }
+    );
+    const { resolveMediaPlayback } = await loadSource(
+        'apps/web/src/services/ipc-playback.service.ts',
+        {
+            '@/services/ipc-playlists.service':
+                'export const isElectronRuntime = () => false; export const getFallbackRawPlaylist = () => null;',
+        }
+    );
+
+    globalThis.window = {
+        setTimeout,
+        clearTimeout,
+        electron: {
+            dbGetPlaybackPosition: async () => ({ positionSeconds: 950, durationSeconds: 3600 }),
+        },
+    };
+
+    try {
+        const restarted = await fetchXtreamMovieDetail(playlist, {
+            ...item,
+            containerExtension: undefined,
+            progressSeconds: 0,
+        });
+        assert.equal(restarted.progressSeconds, 0, 'explicit 0 restart stays 0');
+        const resolvedRestart = await resolveMediaPlayback(restarted, playlist);
+        assert.equal(resolvedRestart.startTime, undefined, 'playback starts from the beginning');
+
+        const resumed = await fetchXtreamMovieDetail(playlist, {
+            ...item,
+            containerExtension: undefined,
+            progressSeconds: undefined,
+        });
+        assert.equal(resumed.progressSeconds, 950, 'normal detail load still restores DB progress');
+        const resolvedResume = await resolveMediaPlayback(resumed, playlist);
+        assert.equal(resolvedResume.startTime, 950);
+    } finally {
+        delete globalThis.window;
+    }
+});
+
+test('parental 4-digit PIN hashes with SHA-256 and rejects malformed codes', async () => {
+    const { hashParentalPin, isValidPinFormat, verifyParentalPin } = await loadSource(
+        'apps/web/src/lib/parental-pin.ts'
+    );
+    assert.equal(isValidPinFormat('2580'), true);
+    assert.equal(isValidPinFormat('258'), false);
+    assert.equal(isValidPinFormat('abcd'), false);
+
+    const hash = await hashParentalPin('2580');
+    assert.equal(hash.length, 64);
+    assert.equal(await verifyParentalPin('2580', hash), true);
+    assert.equal(await verifyParentalPin('0000', hash), false);
+    await assert.rejects(() => hashParentalPin('12a4'));
+});
+
+test('EPG batch lookup chunks large channel lists instead of truncating at 200', async () => {
+    const { fetchCurrentEpgForChannels } = await loadSource(
+        'apps/web/src/services/ipc-epg.service.ts',
+        {
+            '@/services/ipc-playlists.service': 'export const isElectronRuntime = () => true;',
+        }
+    );
+    const batchSizes = [];
+    globalThis.window = {
+        electron: {
+            getCurrentProgramsBatch: async (ids) => {
+                batchSizes.push(ids.length);
+                return Object.fromEntries(ids.map((id) => [id, { title: `Prog ${id}` }]));
+            },
+        },
+    };
+    try {
+        const ids = Array.from({ length: 450 }, (_, i) => `ch-${i + 1}`);
+        const res = await fetchCurrentEpgForChannels(ids);
+        assert.deepEqual(batchSizes, [200, 200, 50]);
+        assert.equal(res['ch-450'].title, 'Prog ch-450');
+    } finally {
+        delete globalThis.window;
+    }
+});

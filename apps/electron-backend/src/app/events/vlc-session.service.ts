@@ -1,9 +1,14 @@
 import { spawn } from 'child_process';
 import { AddressInfo, createServer } from 'net';
+import { redactSensitiveData } from '@iptvnator/shared/logging';
 import {
     PlayerContentInfo,
     readExternalPlayerErrorCode,
 } from '@iptvnator/shared/interfaces';
+import {
+    assertSafePlaybackUrl,
+    sanitizePlayerTextValue,
+} from '../util/playback-url-guard';
 import {
     VLC_PLAYER_ARGUMENTS,
     VLC_PLAYER_PATH,
@@ -186,6 +191,8 @@ export async function openVlcPlayer({
     let freshTeardownUnconfirmed = false;
 
     try {
+        const safeUrl = assertSafePlaybackUrl(url);
+        const safeTitle = sanitizePlayerTextValue(title) ?? '';
         const isFlatpak = isRunningInFlatpak();
         const vlcLaunchContext = resolveExternalPlayerLaunchContext(
             'vlc',
@@ -205,7 +212,7 @@ export async function openVlcPlayer({
             effectiveUserAgent,
             headerFields,
         } = resolveEffectiveExternalPlaybackRequest({
-            url,
+            url: safeUrl,
             userAgent,
             referer,
             origin,
@@ -216,7 +223,7 @@ export async function openVlcPlayer({
             launchMode: vlcLaunchContext.mode,
             requestedReuseInstance,
             reuseInstance,
-            stream: maskUrlForLogs(url),
+            stream: maskUrlForLogs(safeUrl),
             hasUserAgent: Boolean(effectiveUserAgent),
             hasReferer: Boolean(effectiveReferer),
             hasOrigin: Boolean(effectiveOrigin),
@@ -230,8 +237,8 @@ export async function openVlcPlayer({
             const reused = await reusableVlcProcess.tryReuse({
                 session,
                 previousProcessSessionId,
-                url,
-                title,
+                url: safeUrl,
+                title: safeTitle,
                 effectiveUserAgent,
                 effectiveReferer,
                 effectiveOrigin,
@@ -289,9 +296,9 @@ export async function openVlcPlayer({
             args.push(`--start-time=${startTime}`);
         }
 
-        args.push(url);
-        if (title) {
-            args.push(`:meta-title=${title}`);
+        args.push(safeUrl);
+        if (safeTitle) {
+            args.push(`:meta-title=${safeTitle}`);
         }
 
         traceExternalPlayer('vlc args prepared', {
@@ -511,7 +518,10 @@ export async function openVlcPlayer({
                     proc.stderr.on('data', (data) => {
                         const output = data.toString().trim();
                         if (output) {
-                            console.error('[VLC stderr]:', output);
+                            console.error(
+                                '[VLC stderr]:',
+                                redactSensitiveData(output)
+                            );
                         }
                     });
                 }
@@ -632,7 +642,10 @@ export async function openVlcPlayer({
 
         return externalPlayerSessions.markOpened(session.id) ?? session;
     } catch (error) {
-        console.error('Error opening VLC player:', error);
+        console.error(
+            'Error opening VLC player:',
+            redactSensitiveData(error)
+        );
         const restoredSession =
             reuseState.teardownUnconfirmed &&
             !reuseState.contentMutated &&

@@ -52,16 +52,7 @@ handleWorkerRequest(
 );
 handleWorkerRequest(
     'DB_UPDATE_PLAYLIST',
-    (
-        playlistId: string,
-        updates: {
-            name?: string;
-            username?: string;
-            password?: string;
-            serverUrl?: string;
-            lastUpdated?: string;
-        }
-    ) => ({
+    (playlistId: string, updates: Record<string, unknown>) => ({
         playlistId,
         updates,
     })

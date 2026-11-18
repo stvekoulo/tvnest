@@ -30,9 +30,17 @@ import {
     getCategories,
     hasCategories,
     saveCategories,
+    setCategoryLocked,
     setCategoryLocks,
     updateCategoryVisibility,
 } from '../database/operations/category.operations';
+import {
+    getCategoriesWithCounts,
+    getDashboardHighlights,
+    getPlaylistStreamCounts,
+    queryCatalog,
+} from '../database/operations/catalog-filter.operations';
+import type { CatalogFilterQuery } from '../database/operations/catalog-filter.types';
 import { setParentalLockActive } from '../database/parental-lock-state';
 import {
     addFavorite,
@@ -506,6 +514,46 @@ async function executeRequest(
             );
         }
 
+        case 'DB_SET_CATEGORY_LOCKED': {
+            const payload = message.payload as {
+                categoryId: number;
+                locked: boolean;
+            };
+            return setCategoryLocked(db, payload.categoryId, payload.locked);
+        }
+
+        case 'DB_QUERY_CATALOG': {
+            return queryCatalog(message.payload as CatalogFilterQuery, db);
+        }
+
+        case 'DB_GET_CATEGORIES_WITH_COUNTS': {
+            const payload = message.payload as {
+                playlistId: string;
+                language?: string;
+            };
+            return getCategoriesWithCounts(
+                payload.playlistId,
+                payload.language,
+                db
+            );
+        }
+
+        case 'DB_GET_PLAYLIST_STREAM_COUNTS': {
+            return getPlaylistStreamCounts(db);
+        }
+
+        case 'DB_GET_DASHBOARD_HIGHLIGHTS': {
+            const payload = message.payload as {
+                playlistId: string;
+                preferredLanguage?: string;
+            };
+            return getDashboardHighlights(
+                payload.playlistId,
+                payload.preferredLanguage,
+                db
+            );
+        }
+
         case 'DB_HAS_CONTENT': {
             const payload = message.payload as {
                 playlistId: string;
@@ -792,13 +840,7 @@ async function executeRequest(
         case 'DB_UPDATE_PLAYLIST': {
             const payload = message.payload as {
                 playlistId: string;
-                updates: {
-                    name?: string;
-                    username?: string;
-                    password?: string;
-                    serverUrl?: string;
-                    lastUpdated?: string;
-                };
+                updates: Parameters<typeof updatePlaylist>[2];
             };
             return updatePlaylist(db, payload.playlistId, payload.updates);
         }

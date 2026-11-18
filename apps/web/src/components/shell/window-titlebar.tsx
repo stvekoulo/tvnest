@@ -24,6 +24,7 @@ interface WindowTitlebarProps {
   onSearchChange: (q: string) => void;
   /** Le champ de recherche perd le focus. */
   onSearchBlur?: () => void;
+  onOpenMobileSearch?: () => void;
   syncLabel: string | null;
   uiLanguage: UiLanguage;
   onOpenAddSource: () => void;
@@ -37,6 +38,7 @@ export function WindowTitlebar({
   searchQuery,
   onSearchChange,
   onSearchBlur,
+  onOpenMobileSearch,
   syncLabel,
   uiLanguage,
   onOpenAddSource,
@@ -107,6 +109,17 @@ export function WindowTitlebar({
             }
           />
         </div>
+
+        {onOpenMobileSearch ? (
+          <button
+            type="button"
+            aria-label="Rechercher"
+            onClick={onOpenMobileSearch}
+            className="inline-flex size-8 items-center justify-center rounded-full border border-border bg-elevated text-muted-foreground transition-colors hover:text-foreground md:hidden"
+          >
+            <Search className="size-3.5" />
+          </button>
+        ) : null}
 
         <ThemeToggle className="rounded-full" />
 

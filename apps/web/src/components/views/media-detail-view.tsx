@@ -1,5 +1,5 @@
-// Page dédiée pleine largeur pour la fiche détaillée d'un Film ou d'une Série (sans modal).
-import { ArrowLeft, Calendar, Clock, Star, Users } from 'lucide-react';
+// Page dédiée pleine largeur pour la fiche détaillée d'un Film ou d'une Série.
+import { ArrowLeft, Calendar, Clock, Star, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MediaArtwork } from '@/components/cards/media-artwork';
 import { Button } from '@/components/motion/button/base';
@@ -14,21 +14,26 @@ import { findResumeEpisode, nextUnwatchedEpisode, type ResumePoint } from '@/lib
 import { fetchSavedPlaybackPosition } from '@/services/ipc-system.service';
 import type { SeriesDetail, UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 
+function extractYoutubeId(raw?: string): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
 interface MediaDetailViewProps {
   media: UnifiedMedia;
   seriesDetail: SeriesDetail | null;
   loading: boolean;
-  /** Échec du chargement de la fiche (serveur lent ou injoignable). */
   error?: string | null;
   onRetry?: () => void;
   playlist?: UnifiedPlaylist | null;
   uiLanguage: UiLanguage;
   theaterOpen: boolean;
-  /** Média du lecteur unique de l'application (affiché ici en lecture intégrée). */
   activeMedia: UnifiedMedia | null;
   onBack: () => void;
   onPlayInline: (item: UnifiedMedia) => void;
-  /** Lecture directe à une position (boutons Reprendre / Recommencer de la fiche). */
   onPlayAt: (item: UnifiedMedia, positionSeconds: number, theater: boolean) => void;
   onStopPlayback: () => void;
   onOpenExternal: (player: 'mpv' | 'vlc', item: UnifiedMedia) => void;
@@ -56,16 +61,16 @@ export function MediaDetailView({
   onToggleFavorite,
   onDownload,
 }: MediaDetailViewProps) {
-  // La lecture intégrée utilise le lecteur unique de l'application : passer en plein écran
-  // puis revenir ne recharge pas le flux.
   const [inlineActive, setInlineActive] = useState(false);
+  const [trailerOpen, setTrailerOpen] = useState(false);
   const inlineMedia = inlineActive ? activeMedia : null;
+  const youtubeId = extractYoutubeId(media.youtubeTrailer);
 
   useEffect(() => {
     setInlineActive(false);
+    setTrailerOpen(false);
   }, [media.id]);
 
-  // Position enregistrée du film, relue à l'ouverture et à l'arrêt de la lecture.
   const [savedMovie, setSavedMovie] = useState<{ positionSeconds: number; durationSeconds?: number } | null>(null);
   const playingSomething = activeMedia !== null;
   useEffect(() => {
@@ -88,25 +93,25 @@ export function MediaDetailView({
       : null;
   })();
 
-  // Lecture arrêtée (croix du lecteur) : la fiche réaffiche son en-tête.
   useEffect(() => {
     if (!activeMedia) setInlineActive(false);
   }, [activeMedia]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !theaterOpen && !document.fullscreenElement) {
-        if (inlineMedia) {
-          setInlineActive(false);
-          onStopPlayback();
-        } else {
-          onBack();
-        }
+      if (e.key !== 'Escape' || theaterOpen || document.fullscreenElement) return;
+      if (trailerOpen) {
+        setTrailerOpen(false);
+      } else if (inlineMedia) {
+        setInlineActive(false);
+        onStopPlayback();
+      } else {
+        onBack();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inlineMedia, theaterOpen, onBack, onStopPlayback]);
+  }, [trailerOpen, inlineMedia, theaterOpen, onBack, onStopPlayback]);
 
   const startInlinePlayback = (target: UnifiedMedia) => {
     setInlineActive(true);
@@ -123,6 +128,10 @@ export function MediaDetailView({
     if (!seriesDetail || seriesDetail.seasons.length === 0) return null;
     return nextUnwatchedEpisode(seriesDetail, getSessionPosition);
   };
+
+  const externalTarget = resume
+    ? { ...resume.item, progressSeconds: resume.positionSeconds }
+    : resolvePlayTarget();
 
   return (
     <div className="space-y-6 pb-10">
@@ -146,7 +155,6 @@ export function MediaDetailView({
         ) : null}
       </div>
 
-      {/* Scène Hero ou Lecteur intégré TVNest Cinema */}
       <section className="relative overflow-hidden rounded-[28px] border border-border bg-card shadow-xl">
         {inlineMedia ? (
           <div className="aspect-video max-h-[68vh] w-full bg-black">
@@ -191,7 +199,7 @@ export function MediaDetailView({
                     </span>
                   ) : null}
                   {media.rating && Number(media.rating) > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-elevated px-2.5 py-1 text-foreground dark:text-foreground">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-elevated px-2.5 py-1 text-foreground">
                       <Star className="size-3 fill-current" /> {Number(media.rating).toFixed(1)}
                     </span>
                   ) : null}
@@ -239,20 +247,20 @@ export function MediaDetailView({
                   media={media}
                   uiLanguage={uiLanguage}
                   resumeLabel={resume?.label ?? ''}
+                  canOpenExternal={Boolean(externalTarget)}
                   onPlayInline={() => {
                     if (resume) return playResumePoint(resume, resume.positionSeconds, false);
                     const target = resolvePlayTarget();
                     if (target) startInlinePlayback(target);
                   }}
                   onRestart={resume ? () => playResumePoint(resume, 0, false) : undefined}
-                  onOpenExternal={(player) =>
-                    onOpenExternal(player, resume ? { ...media, progressSeconds: resume.positionSeconds } : media)
-                  }
+                  onOpenExternal={(player) => externalTarget && onOpenExternal(player, externalTarget)}
                   onPlayTheater={() => {
                     if (resume) return playResumePoint(resume, resume.positionSeconds, true);
                     const target = resolvePlayTarget();
                     if (target) onPlayTheater(target);
                   }}
+                  onOpenTrailer={youtubeId ? () => setTrailerOpen(true) : undefined}
                   onToggleFavorite={() => onToggleFavorite(media)}
                   onDownload={() => onDownload(media)}
                 />
@@ -270,6 +278,38 @@ export function MediaDetailView({
           onDownloadEpisode={onDownload}
           onOpenExternal={onOpenExternal}
         />
+      ) : null}
+
+      {trailerOpen && youtubeId ? (
+        <div
+          data-tvnest-overlay=""
+          onClick={() => setTrailerOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-4xl overflow-hidden rounded-[26px] border border-border bg-black shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-white/15 px-5 py-3 text-white">
+              <span className="truncate text-sm font-bold">Bande-annonce · {media.title}</span>
+              <button
+                type="button"
+                aria-label="Fermer la bande-annonce"
+                onClick={() => setTrailerOpen(false)}
+                className="inline-flex size-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <iframe
+              title={`Bande-annonce ${media.title}`}
+              src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1`}
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+              className="aspect-video w-full border-0 bg-black"
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );

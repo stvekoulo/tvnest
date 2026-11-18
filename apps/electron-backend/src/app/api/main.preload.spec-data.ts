@@ -1,13 +1,17 @@
 import type { ElectronBridgeApi } from '@iptvnator/shared/interfaces';
+import type { preloadCatalogFilterApi } from './preload-database.api';
+
+type ExposedPreloadBridgeApi = ElectronBridgeApi &
+    typeof preloadCatalogFilterApi;
 
 type ElectronBridgeMethodName = Extract<
     {
-        [K in keyof ElectronBridgeApi]: ElectronBridgeApi[K] extends (
-            ...args: never[]
-        ) => unknown
+        [K in keyof ExposedPreloadBridgeApi]: NonNullable<
+            ExposedPreloadBridgeApi[K]
+        > extends (...args: never[]) => unknown
             ? K
             : never;
-    }[keyof ElectronBridgeApi],
+    }[keyof ExposedPreloadBridgeApi],
     string
 >;
 
@@ -209,6 +213,36 @@ export const dbPreloadCases: PreloadInvokeCase[] = [
         args: [playlistId, 'live', categoryIds],
         channel: 'DB_SET_CATEGORY_LOCKS',
         forwardedArgs: [playlistId, 'live', categoryIds],
+    },
+    {
+        method: 'dbSetCategoryLocked',
+        args: [10, true],
+        channel: 'DB_SET_CATEGORY_LOCKED',
+        forwardedArgs: [10, true],
+    },
+    {
+        method: 'dbQueryCatalog',
+        args: [{ playlistId, type: 'movie' }],
+        channel: 'DB_QUERY_CATALOG',
+        forwardedArgs: [{ playlistId, type: 'movie' }],
+    },
+    {
+        method: 'dbGetCategoriesWithCounts',
+        args: [playlistId, 'fr'],
+        channel: 'DB_GET_CATEGORIES_WITH_COUNTS',
+        forwardedArgs: [playlistId, 'fr'],
+    },
+    {
+        method: 'dbGetPlaylistStreamCounts',
+        args: [],
+        channel: 'DB_GET_PLAYLIST_STREAM_COUNTS',
+        forwardedArgs: [],
+    },
+    {
+        method: 'dbGetDashboardHighlights',
+        args: [playlistId, 'fr'],
+        channel: 'DB_GET_DASHBOARD_HIGHLIGHTS',
+        forwardedArgs: [playlistId, 'fr'],
     },
     {
         method: 'dbHasContent',

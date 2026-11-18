@@ -3,27 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http: https:; media-src 'self' blob: http: https:; connect-src 'self' http: https: ws://127.0.0.1:4200 ws://localhost:4200; frame-src https://www.youtube-nocookie.com https://www.youtube.com; object-src 'none'; base-uri 'self';"
+    />
     <title>TVNest</title>
     <link rel="icon" type="image/png" href="./assets/icons/favicon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <script>
-      (function () {
-        try {
-          var t = localStorage.getItem('tvnest.theme.v1');
-          var root = document.documentElement;
-          if (t === 'light') {
-            root.classList.remove('dark');
-          } else {
-            root.classList.add('dark');
-          }
-        } catch (e) {}
-      })();
-    </script>
   </head>
   <body class="bg-background text-foreground antialiased selection:bg-primary/25">
     <div id="root"></div>

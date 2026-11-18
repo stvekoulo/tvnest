@@ -1,50 +1,34 @@
 ---
 name: iptvnator-ui-design
-description: Use when changing user-visible Angular UI in IPTVnator, especially channel rows or lists, EPG views, settings and playlist surfaces, selection states, shared portal components, or light/dark styling.
+description: Use when changing user-visible React UI in TVNest, including catalog grids, EPG guide, player OSD, detail views, settings, or dialogs.
 ---
 
-# IPTVnator UI Design
+# TVNest React UI Design
 
 ## Inspect First
 
-- Policy: `docs/architecture/iptvnator-ui-guidelines.md`
-- Theme and navigation: `apps/web/src/m3-theme.scss`,
-  `libs/ui/styles/_nav-list.scss`
-- Channel row: `libs/ui/components/src/lib/channel-list-container/channel-list-item/`
-- Shared EPG timeline/list: `libs/ui/epg/src/lib/epg-timeline/`,
-  `libs/ui/epg/src/lib/epg-list-view/`
+- Shell and navigation: `apps/web/src/App.tsx`,
+  `apps/web/src/components/shell/unified-sidebar.tsx`,
+  `apps/web/src/components/shell/window-titlebar.tsx`
+- Player surfaces: `apps/web/src/components/player/stream-surface.tsx` and
+  `apps/web/src/components/player/`
+- Shared primitives: `apps/web/src/components/motion/`
+- Guidelines: `docs/architecture/iptvnator-ui-guidelines.md`
 
-Before adding local markup, inspect `@iptvnator/ui/components`,
-`@iptvnator/ui/epg`, `@iptvnator/ui/playback`,
-`@iptvnator/ui/shared-portals`, `@iptvnator/portal/shared/ui`, and
-`@iptvnator/playlist/shared/ui`. Stateful collection loading, persistence, and
-cross-provider orchestration belong in `@iptvnator/portal/shared/data-access`,
-not UI or util.
+## Design and Accessibility Contract
 
-## Design Contract
-
-- Prefer dense, scannable application UI. Behavior-only work must not include
-  an opportunistic visual rewrite.
-- App chrome uses app-owned selection, surface, and text tokens in both themes.
-  Do not extend the known hard-coded EPG/surface styling debt.
-- Dense rows use minimum dimensions rather than a fixed width: the text column
-  needs `min-width: 0` plus ellipsis, while logos and trailing actions use
-  `flex-shrink: 0`.
-- Assign one scroll owner per pane. Preserve sticky controls, keyboard/focus
-  feedback, and loading, empty, error, disabled, hover, and selected states.
-- Providers supply controlled data to shared EPG timeline/list/panel components
-  instead of rebuilding those views.
-- Shared changes require checking every affected M3U, Xtream, Stalker,
-  workspace, and collection consumer in light and dark themes.
-- `<mat-icon>` names must exist in the bundled Material Icons font;
-  `pnpm run styles:icon-ligatures:validate` checks them (UI guidelines, Icon
-  Names).
+- Keep every file in `apps/web/src` at or below 300 lines; extract focused
+  subcomponents and hooks cleanly.
+- Hidden overlays (`opacity-0`) must also disable hit-testing (`pointer-events-none`
+  and `inert`) so underlying video surfaces remain clickable.
+- Floating popovers above native `libmpv` views must register dismissal handlers
+  (`Escape` and outside pointer down) so `avoidNativeView` never stays stuck on.
+- Interactive elements must be real `<button>` elements (or carry keyboard and
+  ARIA attributes) with visible `:focus-visible` rings and accessible labels.
+- Never use em-dashes in UI copy; keep labels concise and consistent with the
+  active language (`apps/web/src/lib/i18n.ts`).
 
 ## Validation
 
-Run the focused component/unit target and the closest Playwright workflow for a
-visible change. Electron CDP is a fallback for Electron-only gaps, not a
-replacement for an available E2E flow. Record any uncovered visual state.
-A change that adds `backdrop-filter`, `filter`, animations or a rounded
-scroller also runs `pnpm run perf:compositing` (see the theme/style skill's
-Rendering Cost section) and quotes the numbers.
+Run `pnpm run typecheck:web`, `pnpm run test:web`, `pnpm nx lint web`, and
+`pnpm nx build web`.

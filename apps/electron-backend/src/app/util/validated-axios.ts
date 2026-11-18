@@ -11,6 +11,8 @@ import { isIP, LookupFunction } from 'node:net';
 import { observeAgentSocketConnections } from '@iptvnator/shared/host-health';
 import { getProxyForUrl } from 'proxy-from-env';
 import {
+    isLocalHostname,
+    isPrivateOrReservedIp,
     RemoteUrlPolicy,
     UnsafeUrlError,
     validateRemoteUrl,
@@ -295,6 +297,22 @@ export async function requestWithValidatedRedirects<T = unknown>(
         }
 
         const nextUrl = new URL(location, validatedUrl);
+        if (
+            policy.allowPrivateNetworks &&
+            policy.allowPrivateNetworkRedirects !== true &&
+            initialOrigin &&
+            nextUrl.origin !== initialOrigin
+        ) {
+            const nextHost = nextUrl.hostname
+                .trim()
+                .toLowerCase()
+                .replace(/^\[|\]$/g, '');
+            if (isLocalHostname(nextHost) || isPrivateOrReservedIp(nextHost)) {
+                throw new UnsafeUrlError(
+                    'URL points to a private or local network address'
+                );
+            }
+        }
         const method = requestConfig.method?.toUpperCase();
         const shouldRewriteToGet =
             (response.status === 303 && method !== 'HEAD') ||

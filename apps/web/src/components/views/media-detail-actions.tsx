@@ -1,5 +1,5 @@
-// Barre d'actions @beui de la fiche détaillée Film / Série (lecture, favori, MPV/VLC, téléchargement).
-import { Download, ExternalLink, Heart, Maximize2, Play, RotateCcw, Tv } from 'lucide-react';
+// Barre d'actions @beui de la fiche détaillée Film / Série (lecture, favori, bande-annonce, MPV/VLC, téléchargement).
+import { Clapperboard, Download, ExternalLink, Heart, Maximize2, Play, RotateCcw, Tv } from 'lucide-react';
 import { useState } from 'react';
 import { ActionSwapButton } from '@/components/motion/action-swap';
 import { Button, StatefulButton, type ButtonState } from '@/components/motion/button';
@@ -10,13 +10,13 @@ import type { UnifiedMedia } from '@/types/iptv.types';
 interface MediaDetailActionsProps {
   media: UnifiedMedia;
   uiLanguage: UiLanguage;
-  /** Point de reprise (« S1E3 · 12:34 »), vide si rien n'est entamé. */
   resumeLabel: string;
+  canOpenExternal: boolean;
   onPlayInline: () => void;
   onRestart?: () => void;
-  /** MPV / VLC via l'espace de travail : le lecteur intégré libère d'abord le flux. */
   onOpenExternal: (player: 'mpv' | 'vlc') => void;
   onPlayTheater: () => void;
+  onOpenTrailer?: () => void;
   onToggleFavorite: () => void;
   onDownload: () => Promise<void>;
 }
@@ -25,10 +25,12 @@ export function MediaDetailActions({
   media,
   uiLanguage,
   resumeLabel,
+  canOpenExternal,
   onPlayInline,
   onRestart,
   onOpenExternal,
   onPlayTheater,
+  onOpenTrailer,
   onToggleFavorite,
   onDownload,
 }: MediaDetailActionsProps) {
@@ -64,6 +66,13 @@ export function MediaDetailActions({
         Plein écran Cinéma
       </Button>
 
+      {onOpenTrailer ? (
+        <Button size="md" variant="secondary" onClick={onOpenTrailer}>
+          <Clapperboard className="size-4" />
+          Bande-annonce
+        </Button>
+      ) : null}
+
       <ActionSwapButton
         size="md"
         variant="secondary"
@@ -74,39 +83,34 @@ export function MediaDetailActions({
           {
             id: 'fav',
             label: 'Dans vos favoris',
-            icon: <Heart className="size-4 fill-current text-foreground" />,
+            icon: <Heart className="size-4 fill-rose-500 text-rose-500" />,
           },
         ]}
       />
 
-      {isElectronRuntime() && media.kind !== 'series' ? (
+      {isElectronRuntime() && canOpenExternal ? (
         <>
-          <Button
-            size="md"
-            variant="outline"
-            onClick={() => onOpenExternal('mpv')}
-          >
+          <Button size="md" variant="outline" onClick={() => onOpenExternal('mpv')}>
             <Tv className="size-3.5" /> MPV
           </Button>
-          <Button
-            size="md"
-            variant="outline"
-            onClick={() => onOpenExternal('vlc')}
-          >
+          <Button size="md" variant="outline" onClick={() => onOpenExternal('vlc')}>
             <ExternalLink className="size-3.5" /> VLC
           </Button>
-          <StatefulButton
-            size="md"
-            variant="secondary"
-            state={dlState}
-            loadingText="Envoi..."
-            successText="Ajouté"
-            icon={<Download className="size-3.5" />}
-            onClick={handleDownload}
-          >
-            Télécharger
-          </StatefulButton>
         </>
+      ) : null}
+
+      {isElectronRuntime() && media.kind !== 'series' ? (
+        <StatefulButton
+          size="md"
+          variant="secondary"
+          state={dlState}
+          loadingText="Envoi..."
+          successText="Ajouté"
+          icon={<Download className="size-3.5" />}
+          onClick={handleDownload}
+        >
+          Télécharger
+        </StatefulButton>
       ) : null}
     </div>
   );

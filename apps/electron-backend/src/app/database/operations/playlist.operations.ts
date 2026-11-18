@@ -376,21 +376,75 @@ export async function updatePlaylist(
     playlistId: string,
     updates: {
         name?: string;
+        title?: string;
         username?: string;
         password?: string;
         serverUrl?: string;
         lastUpdated?: string;
+        updateDate?: number;
+        count?: number;
+        autoRefresh?: boolean;
+        userAgent?: string;
+        origin?: string;
+        referrer?: string;
+        filePath?: string;
+        url?: string;
+        portalUrl?: string;
+        macAddress?: string;
+        favorites?: unknown;
+        recentlyViewed?: unknown;
+        lastUsage?: string;
     }
 ): Promise<{ success: boolean }> {
-    await db
-        .update(schema.playlists)
-        .set({
-            ...updates,
-            ...(updates.serverUrl === undefined
-                ? {}
-                : { payload: serverTimezoneInvalidation(updates.serverUrl) }),
-        })
-        .where(eq(schema.playlists.id, playlistId));
+    const patch: Omit<Partial<typeof schema.playlists.$inferInsert>, 'payload'> & {
+        payload?: ReturnType<typeof serverTimezoneInvalidation> | string | null;
+    } = {};
+    const resolvedName = updates.name ?? updates.title;
+    if (resolvedName !== undefined) patch.name = resolvedName;
+    if (updates.username !== undefined) patch.username = updates.username;
+    if (updates.password !== undefined) patch.password = updates.password;
+    if (updates.serverUrl !== undefined) {
+        patch.serverUrl = updates.serverUrl;
+        patch.payload = serverTimezoneInvalidation(updates.serverUrl);
+    }
+    if (updates.lastUpdated !== undefined) {
+        patch.lastUpdated = updates.lastUpdated;
+    } else if (typeof updates.updateDate === 'number') {
+        patch.updateDate = updates.updateDate;
+        patch.lastUpdated = new Date(updates.updateDate).toISOString();
+    }
+    if (updates.updateDate !== undefined) patch.updateDate = updates.updateDate;
+    if (updates.count !== undefined) patch.count = updates.count;
+    if (updates.autoRefresh !== undefined) {
+        patch.autoRefresh = Boolean(updates.autoRefresh);
+    }
+    if (updates.userAgent !== undefined) patch.userAgent = updates.userAgent;
+    if (updates.origin !== undefined) patch.origin = updates.origin;
+    if (updates.referrer !== undefined) patch.referrer = updates.referrer;
+    if (updates.filePath !== undefined) patch.filePath = updates.filePath;
+    if (updates.url !== undefined) patch.url = updates.url;
+    if (updates.portalUrl !== undefined) patch.portalUrl = updates.portalUrl;
+    if (updates.macAddress !== undefined) patch.macAddress = updates.macAddress;
+    if (updates.lastUsage !== undefined) patch.lastUsage = updates.lastUsage;
+    if (updates.favorites !== undefined) {
+        patch.favorites =
+            typeof updates.favorites === 'string'
+                ? updates.favorites
+                : JSON.stringify(updates.favorites ?? []);
+    }
+    if (updates.recentlyViewed !== undefined) {
+        patch.recentlyViewed =
+            typeof updates.recentlyViewed === 'string'
+                ? updates.recentlyViewed
+                : JSON.stringify(updates.recentlyViewed ?? []);
+    }
+
+    if (Object.keys(patch).length > 0) {
+        await db
+            .update(schema.playlists)
+            .set(patch)
+            .where(eq(schema.playlists.id, playlistId));
+    }
 
     return { success: true };
 }

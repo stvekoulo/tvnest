@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { dialog, ipcMain } from 'electron';
 import {
     CLOSE_EXTERNAL_PLAYER_SESSION,
     type ExternalPlayerName,
@@ -91,10 +91,53 @@ ipcMain.handle(
     }
 );
 
+function sanitizePlayerExecutablePath(
+    rawPath: string | null | undefined
+): string {
+    const normalized = normalizePlayerPathForStore(
+        typeof rawPath === 'string'
+            ? Array.from(rawPath)
+                  .filter((ch) => {
+                      const c = ch.charCodeAt(0);
+                      return c > 0x1f && c !== 0x7f;
+                  })
+                  .join('')
+            : rawPath
+    );
+    if (/^\\\\/.test(normalized)) {
+        throw new Error('Network UNC paths are not allowed for player binaries');
+    }
+    return normalized;
+}
+
+ipcMain.handle(
+    'SELECT_EXTERNAL_PLAYER_EXECUTABLE',
+    async (_event, player: ExternalPlayerName): Promise<string | null> => {
+        const filters =
+            process.platform === 'win32'
+                ? [{ name: 'Executable', extensions: ['exe', 'cmd', 'bat'] }]
+                : process.platform === 'darwin'
+                  ? [{ name: 'Application', extensions: ['app'] }, { name: 'Binary', extensions: ['*'] }]
+                  : [{ name: 'Binary', extensions: ['*'] }];
+        const result = await dialog.showOpenDialog({
+            properties: ['openFile'],
+            title: player === 'vlc' ? 'Choisir VLC' : 'Choisir MPV',
+            filters,
+        });
+        if (result.canceled || result.filePaths.length === 0) {
+            return null;
+        }
+        const chosen = sanitizePlayerExecutablePath(result.filePaths[0]);
+        store.set(player === 'vlc' ? VLC_PLAYER_PATH : MPV_PLAYER_PATH, chosen);
+        return chosen;
+    }
+);
+
 ipcMain.handle(
     'SET_MPV_PLAYER_PATH',
     (_event, mpvPlayerPath: string | null | undefined) => {
-        const normalizedPlayerPath = normalizePlayerPathForStore(mpvPlayerPath);
+        const normalizedPlayerPath =
+            sanitizePlayerExecutablePath(mpvPlayerPath);
         traceExternalPlayer('set mpv player path', {
             playerPath: normalizedPlayerPath,
         });
@@ -138,7 +181,8 @@ ipcMain.handle(
 ipcMain.handle(
     'SET_VLC_PLAYER_PATH',
     (_event, vlcPlayerPath: string | null | undefined) => {
-        const normalizedPlayerPath = normalizePlayerPathForStore(vlcPlayerPath);
+        const normalizedPlayerPath =
+            sanitizePlayerExecutablePath(vlcPlayerPath);
         traceExternalPlayer('set vlc player path', {
             playerPath: normalizedPlayerPath,
         });

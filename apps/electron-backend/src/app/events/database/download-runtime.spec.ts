@@ -183,7 +183,10 @@ describe('download runtime pause and resume', () => {
                     Range: 'bytes=50-',
                 }),
             }),
-            { allowPrivateNetworks: true }
+            {
+                allowPrivateNetworks: true,
+                allowPrivateNetworkRedirects: false,
+            }
         );
         await waitForStatus(set, 'completed');
     });

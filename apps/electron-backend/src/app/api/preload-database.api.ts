@@ -49,6 +49,7 @@ export type PreloadDatabaseCoreSlice = Pick<
     | 'dbGetAllCategories'
     | 'dbUpdateCategoryVisibility'
     | 'dbSetCategoryLocks'
+    | 'dbSetCategoryLocked'
     | 'dbHasContent'
     | 'dbGetContent'
     | 'dbSaveContent'
@@ -137,6 +138,8 @@ export const preloadDatabaseCoreApi: PreloadDatabaseCoreSlice = {
         ipcRenderer.invoke('DB_UPDATE_CATEGORY_VISIBILITY', categoryIds, hidden),
     dbSetCategoryLocks: (playlistId: string, type: string, lockedXtreamIds: number[]) =>
         ipcRenderer.invoke('DB_SET_CATEGORY_LOCKS', playlistId, type, lockedXtreamIds),
+    dbSetCategoryLocked: (categoryId: number, locked: boolean) =>
+        ipcRenderer.invoke('DB_SET_CATEGORY_LOCKED', categoryId, locked),
     dbHasContent: (playlistId: string, type: string) =>
         ipcRenderer.invoke('DB_HAS_CONTENT', playlistId, type),
     dbGetContent: (playlistId: string, type: string) =>

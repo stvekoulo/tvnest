@@ -34,6 +34,7 @@ interface CatalogWorkspaceViewProps {
   categories: UnifiedCategory[];
   selectedCategory: string;
   onSelectCategory: (catId: string) => void;
+  onToggleCategoryLock?: (cat: UnifiedCategory) => void;
   filters: CatalogFilterState;
   onUpdateFilters: (patch: Partial<CatalogFilterState>) => void;
   onResetFilters: () => void;
@@ -61,6 +62,7 @@ export function CatalogWorkspaceView({
   categories,
   selectedCategory,
   onSelectCategory,
+  onToggleCategoryLock,
   filters,
   onUpdateFilters,
   onResetFilters,
@@ -112,6 +114,7 @@ export function CatalogWorkspaceView({
                   categories={categories}
                   selectedCategory={selectedCategory}
                   onSelectCategory={selectGroup}
+                  onToggleCategoryLock={onToggleCategoryLock}
                   totalCount={totalCatCount || totalMatches}
                   uiLanguage={uiLanguage}
                 />
@@ -195,7 +198,7 @@ export function CatalogWorkspaceView({
                     key={item.id}
                     item={item}
                     active={activeMedia?.id === item.id}
-                    epg={item.tvgId ? epgByChannel[item.tvgId] : null}
+                    epg={epgByChannel[item.tvgId || item.title] ?? null}
                     onPlay={() => onPlay(item, !isLiveSection)}
                     onOpenDetail={item.kind !== 'live' ? () => onOpenDetail(item) : undefined}
                     onToggleFavorite={() => onToggleFavorite(item)}

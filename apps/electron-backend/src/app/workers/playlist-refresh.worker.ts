@@ -22,7 +22,10 @@ import {
 } from '../util/security-errors';
 import { requestWithValidatedRedirects } from '../util/validated-axios';
 import { applyElectronNetworkDefaults } from '../util/network-defaults';
-import { PLAYLIST_FETCH_TIMEOUT_MS } from '../events/playlist-source';
+import {
+    PLAYLIST_FETCH_TIMEOUT_MS,
+    PLAYLIST_MAX_BYTES,
+} from '../events/playlist-source';
 import {
     armWorkerPerformanceCapture,
     executeWithWorkerPerformanceCapture,
@@ -121,8 +124,13 @@ async function fetchPlaylistFromUrl(
                     : {}),
                 signal: controller.signal,
                 timeout: PLAYLIST_FETCH_TIMEOUT_MS,
+                maxContentLength: PLAYLIST_MAX_BYTES,
+                maxBodyLength: PLAYLIST_MAX_BYTES,
             },
-            { allowPrivateNetworks: true }
+            {
+                allowPrivateNetworks: true,
+                allowPrivateNetworkRedirects: false,
+            }
         );
     } catch (error) {
         if (isInvalidTlsCertificateError(error)) {

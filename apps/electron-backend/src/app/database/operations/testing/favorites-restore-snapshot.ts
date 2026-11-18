@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { PwaXtreamBackupStorage } from '@iptvnator/services/pwa-xtream-backup-storage';
-import type { XtreamPlaylistBackupEntry } from '@iptvnator/shared/interfaces';
+import { normalizeXtreamPendingRestoreState } from '@iptvnator/shared/interfaces/xtream-restore-state';
 import * as schema from '@iptvnator/shared/database/schema';
 import type { AppDatabase } from '../../database.types';
 import { createFavoriteTestCatalog } from './favorites-test-catalog';
@@ -64,42 +63,26 @@ export async function verifyRestoredFavoriteSnapshot(db: AppDatabase) {
         assert.equal(returned?.favorite_id, restored.id);
         assert.equal(returned?.title, 'Original returns');
     }
-    const storage = new Map([
-        ['xtream-favorites', JSON.stringify({ p: ['movie:199'] })],
-        [
-            'xtream-collection-items',
-            JSON.stringify({
-                p: {
-                    'movie:199': {
-                        xtream_id: 199,
-                        type: 'movie',
-                        title: 'Browser original',
-                        tmdb_id: '949',
-                        release_year: '1995',
-                        added_at: '2026-01-02',
-                        position: 3,
-                    },
+    const normalized = normalizeXtreamPendingRestoreState({
+        favorites: [
+            {
+                contentType: 'movie',
+                xtreamId: 199,
+                addedAt: '2026-01-02',
+                position: 3,
+                snapshot: {
+                    title: 'Browser original',
+                    tmdbId: '949',
+                    releaseYear: '1995',
                 },
-            }),
+            },
         ],
-    ]);
-    const exported = new PwaXtreamBackupStorage({
-        getItem: (key) => storage.get(key) ?? null,
-        setItem: (key, value) => {
-            storage.set(key, value);
-        },
-        removeItem: (key) => {
-            storage.delete(key);
-        },
-    }).exportInto({
-        exportedId: 'p',
-        userState: {},
-    } as XtreamPlaylistBackupEntry);
+    });
     await catalog(99, 199, 'Different movie', 'movie', 'p', {
         tmdbId: 950,
         releaseYear: 2000,
     });
-    await restoreXtreamFavorites(db, 'p', exported.userState.favorites);
+    await restoreXtreamFavorites(db, 'p', normalized.favorites);
     const restored = (await getFavoritesForBackup(db, 'p')).find(
         (row) => row.xtream_id === 199
     );

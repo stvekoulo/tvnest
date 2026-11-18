@@ -36,7 +36,6 @@ import PlayerEvents from '../events/player.events';
 import { shutdownVlcSession } from '../events/vlc-session.service';
 import PlaylistEvents from '../events/playlist.events';
 import ParentalLockEvents from '../events/parental-lock.events';
-import RemoteControlEvents from '../events/remote-control.events';
 import SettingsEvents from '../events/settings.events';
 import SharedEvents from '../events/shared.events';
 import StalkerEvents from '../events/stalker.events';
@@ -98,7 +97,6 @@ export function bootstrapDeferredEvents(
     registerConnectivityGuardHandlers();
     DatabaseEvents.bootstrapDatabaseEvents();
     EpgEvents.bootstrapEpgEvents();
-    RemoteControlEvents.bootstrapRemoteControlEvents();
 
     // Keep the downloads broadcaster bound to the live window. macOS can
     // rebuild the window while the process runs, and a stale reference

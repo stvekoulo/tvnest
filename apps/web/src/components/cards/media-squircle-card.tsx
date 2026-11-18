@@ -1,4 +1,4 @@
-// Carte média Squircle TVNest avec affiche résiliente, EPG et ouverture de fiche dédiée.
+// Carte média Squircle TVNest avec affiche résiliente, EPG, navigation clavier et fiche dédiée.
 import { Heart, Info, Play, Star } from 'lucide-react';
 import { MediaArtwork } from '@/components/cards/media-artwork';
 import { ActionSwapIcon } from '@/components/motion/action-swap';
@@ -29,13 +29,26 @@ export function MediaSquircleCard({
       ? Math.min(100, Math.round((item.progressSeconds / item.durationSeconds) * 100))
       : 0;
 
+  const activateCard = () => {
+    if (hasDetailPage) onOpenDetail?.();
+    else onPlay();
+  };
+
   return (
-    // Survol en CSS plutôt qu'en composant animé : une grille de 140 cartes se rend bien plus
-    // vite quand on change de rubrique.
     <div
-      onClick={() => (hasDetailPage ? onOpenDetail?.() : onPlay())}
+      role="button"
+      tabIndex={0}
+      aria-label={item.title}
+      onClick={activateCard}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateCard();
+        }
+      }}
       className={cn(
-        'group relative flex cursor-pointer flex-col overflow-hidden rounded-[22px] border bg-card transition-[transform,border-color] duration-200 ease-out hover:-translate-y-[3px] motion-reduce:hover:translate-y-0',
+        'group relative flex cursor-pointer flex-col overflow-hidden rounded-[22px] border bg-card outline-none transition-[transform,border-color] duration-200 ease-out hover:-translate-y-[3px] focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0',
         active
           ? 'border-primary/70 ring-1 ring-primary/35'
           : 'border-border hover:border-primary/40'
@@ -58,7 +71,6 @@ export function MediaSquircleCard({
 
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent opacity-80 transition-opacity group-hover:opacity-95" />
 
-        {/* Badges supérieurs */}
         <div className="absolute inset-x-2.5 top-2.5 z-10 flex items-center justify-between gap-1.5">
           {isLive ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
@@ -80,32 +92,32 @@ export function MediaSquircleCard({
               e.stopPropagation();
               onToggleFavorite();
             }}
-            aria-label="Basculer favori"
+            aria-label={item.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
             className={cn(
               'inline-flex size-7 items-center justify-center rounded-full border backdrop-blur-md transition-colors',
               item.isFavorite
-                ? 'border-white/40 bg-white/20 text-white'
-                : 'border-white/15 bg-black/55 text-white/80 opacity-0 group-hover:opacity-100 hover:text-white'
+                ? 'border-white/40 bg-black/60 text-rose-500'
+                : 'border-white/15 bg-black/55 text-white/80 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-white'
             )}
           >
             <ActionSwapIcon value={item.isFavorite ? 'fav' : 'idle'} className="size-3.5">
-              <Heart className={cn('size-3.5', item.isFavorite && 'fill-current')} />
+              <Heart className={cn('size-3.5', item.isFavorite && 'fill-rose-500 text-rose-500')} />
             </ActionSwapIcon>
           </button>
         </div>
 
-        {/* Actions rapides au survol */}
-        <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onPlay();
             }}
+            aria-label={item.kind === 'series' ? 'Ouvrir les saisons' : 'Lire maintenant'}
             title={item.kind === 'series' ? 'Ouvrir les saisons' : 'Lire maintenant'}
             className="flex size-11 items-center justify-center rounded-full bg-white text-black shadow-lg shadow-black/40 transition-transform hover:scale-105"
           >
-            <Play className="ml-0.5 size-4 fill-white" />
+            <Play className="ml-0.5 size-4 fill-current" />
           </button>
           {hasDetailPage ? (
             <button
@@ -114,6 +126,7 @@ export function MediaSquircleCard({
                 e.stopPropagation();
                 onOpenDetail?.();
               }}
+              aria-label="Fiche détaillée"
               title="Fiche détaillée"
               className="flex size-9 items-center justify-center rounded-full border border-white/25 bg-black/70 text-white backdrop-blur-md hover:bg-black"
             >
@@ -129,7 +142,6 @@ export function MediaSquircleCard({
         ) : null}
       </div>
 
-      {/* Métadonnées inférieures */}
       <div className="flex flex-1 flex-col justify-between gap-1 p-3">
         <h5 className="line-clamp-1 text-xs font-semibold text-foreground" title={item.title}>
           {item.title}

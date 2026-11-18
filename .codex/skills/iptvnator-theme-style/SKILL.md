@@ -1,78 +1,31 @@
 ---
 name: iptvnator-theme-style
-description: Use when changing IPTVnator SCSS tokens, shared layout mixins, portal headers, sidebars, detail views, Electron drag regions, or cross-portal visual consistency.
+description: Use when changing TVNest CSS variables, Tailwind tokens, light/dark surface contrast, typography, or Electron title-bar drag regions.
 ---
 
-# IPTVnator Theme Style
+# TVNest Theme & Style
 
 ## Canonical Sources
 
-- Theme contexts and app tokens: `apps/web/src/m3-theme.scss`
-- Shared forwarding inventory: `libs/ui/styles/_index.scss`
-- Shared partials: `libs/ui/styles/_portal-layout.scss`,
-  `libs/ui/styles/_content-grid.scss`, `libs/ui/styles/_portal-sidebar.scss`,
-  `libs/ui/styles/_panel-header.scss`, `libs/ui/styles/_detail-view.scss`, and
-  `libs/ui/styles/_detail-view-actions.scss`
-- UI policy and migration debt: `docs/architecture/iptvnator-ui-guidelines.md`
+- Theme tokens and CSS variables: `apps/web/src/styles/globals.css`
+- Tailwind config: `apps/web/tailwind.config.js`
+- Theme bootstrap: `apps/web/src/main.tsx`
+- UI guidelines: `docs/architecture/iptvnator-ui-guidelines.md`
 
-The index is a barrel, not a Sass include path: consumers `@use` each
-partial by relative path.
+## Token and Contrast Rules
 
-## Token Boundary
-
-- App-owned surfaces, text, separators, hover states, selections, and provider
-  accents use `--app-*` tokens from `m3-theme.scss`, switched by
-  `.dark-theme`, not `prefers-color-scheme`.
-- Use `--app-selection-on-color` for foregrounds placed on the selection
-  accent; do not assume white has enough contrast in both themes.
-- Angular Material mixins and Material-component overrides may use Material
-  tokens. `m3-theme.scss` declares `--mat-sys-*` for both theme contexts; use
-  them outside Material components only for roles without an app token.
-- Set component tokens through `mat.*-overrides()`; retired `--mdc-*` names
-  do nothing and `pnpm run styles:material-tokens:validate` rejects them.
-- Destructive buttons use `.app-destructive-button` (the `warn` color input is
-  a no-op with M3); provider icons come from `SOURCE_TYPE_ICONS`.
-- Local semantic status colors are acceptable. Existing hard-coded layout,
-  selection, and EPG surface colors are migration debt, not precedent.
-
-## Shared Layout Rules
-
-- Extend the matching partial instead of copying a large provider stylesheet.
-  Provider-neutral services and UI use the existing shared data-access/UI
-  libraries; repeated visual structure belongs in a shared Sass partial.
-  Portal-shared consumers use their existing forwarding style modules instead
-  of copied SCSS.
-- In an Electron drag region, every interactive descendant—buttons, links,
-  inputs, overlays, and resize handles—must explicitly use
-  `app-region: no-drag`. The shared directive-generated `.resize-handle` sets
-  this centrally. Shared live sidebars reserve 8 px between their scroll
-  content and the edge so scrollbar and resize hit areas stay independent.
-- A shared change must be checked across M3U, Xtream, Stalker, workspace,
-  portal catalog/shared UI, and unified collections where relevant.
-
-## Typography
-
-- Font weights are 400, 500, 600 or 700 only, and JetBrains Mono stays at 500
-  or lighter (also where a mono modifier inherits a heavier weight);
-  `pnpm run styles:font-weights:validate` enforces the scale, and the Mono
-  cap in rules that set that family. Read the
-  guidelines' Typography section before changing bundled fonts.
-
-## Rendering Cost
-
-- A composited layer the size of the content area costs about 24 MB of
-  tile memory at 2x against Chromium's 512 MB budget; contract in
-  `docs/architecture/performance-journeys.md` (Compositing budget).
-- No `border-radius`, `mask` or `clip-path` on a scroller or another
-  ancestor of `backdrop-filter`, render-surface `filter`, running
-  animations, `isolation: isolate` or `will-change`: Blink then clips each
-  through a mask layer the size of the clipped area. Paint the corner, as
-  `.workspace-content-frame` does.
-- Adding or changing those properties: run `pnpm run perf:compositing`
-  before and after, quote the numbers in the PR, and extend
-  `compositing.e2e.ts` in `apps/electron-backend-e2e` for a new route.
+- Surfaces, text, borders, and accent tokens come from CSS variables in
+  `apps/web/src/styles/globals.css`, switched via `.dark` / `.light` on `<html>`.
+- Ensure controls (switches, icon buttons, badges, pills) maintain clear WCAG AA
+  contrast in both dark and light themes; never place a near-identical foreground
+  on an accent or surface token.
+- Fonts (`@fontsource-variable/bricolage-grotesque` and
+  `@fontsource-variable/plus-jakarta-sans`) are bundled locally; never load
+  external Google Fonts stylesheets.
+- In Electron drag regions (`-webkit-app-region: drag`), every interactive
+  descendant must set `-webkit-app-region: no-drag`.
 
 ## Validation
 
-Run the affected consumer's Nx lint/test/build target. Inspect light and dark
-themes, selected/hover states, and Electron title-bar drag/no-drag behavior.
+Run `pnpm run typecheck:web`, `pnpm run test:web`, and `pnpm nx build web`, and
+verify both dark and light themes.

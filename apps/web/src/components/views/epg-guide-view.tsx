@@ -1,11 +1,13 @@
 // Guide TV XMLTV (EPG) TVNest : chaînes couvertes en tête, logos XMLTV, émission en cours.
-import { CalendarRange, FolderOpen, Play, RefreshCw, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Play } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MediaArtwork } from '@/components/cards/media-artwork';
 import { Button } from '@/components/motion/button/base';
-import { Input } from '@/components/motion/input';
-import { EpgProgramList, programProgress } from '@/components/views/epg-program-list';
-import { cn } from '@/lib/utils';
+import { EpgChannelSidebar } from '@/components/views/epg-channel-sidebar';
+import { EpgProgramList } from '@/components/views/epg-program-list';
+import { EpgSourceToolbar } from '@/components/views/epg-source-toolbar';
+import { queryFilteredCatalog } from '@/services/ipc-catalog.service';
+import { isElectronRuntime } from '@/services/ipc-playlists.service';
 import {
   epgKeyOf,
   fetchChannelSchedule,
@@ -16,11 +18,29 @@ import {
   searchEpgGuide,
   syncEpgUrls,
 } from '@/services/ipc-system.service';
-import type { AppPreferences, EpgProgram, UnifiedMedia } from '@/types/iptv.types';
+import type {
+  AppPreferences,
+  CatalogFilterState,
+  EpgProgram,
+  UnifiedMedia,
+  UnifiedPlaylist,
+} from '@/types/iptv.types';
 
 const DAY_MS = 86_400_000;
+const ALL_LIVE_FILTERS: CatalogFilterState = {
+  search: '',
+  language: 'ALL',
+  quality: 'ALL',
+  minRating: 0,
+  year: '',
+  onlyFavorites: false,
+  hasCatchup: false,
+  hasEpg: false,
+  sortBy: 'relevance',
+};
 
 interface EpgGuideViewProps {
+  activePlaylist?: UnifiedPlaylist | null;
   liveItems: UnifiedMedia[];
   prefs: AppPreferences;
   onUpdatePrefs: (patch: Partial<AppPreferences>) => Promise<void>;
@@ -28,11 +48,22 @@ interface EpgGuideViewProps {
   onNotify: (msg: string) => void;
 }
 
-export function EpgGuideView({ liveItems, prefs, onUpdatePrefs, onPlay, onNotify }: EpgGuideViewProps) {
+export function EpgGuideView({
+  activePlaylist,
+  liveItems,
+  prefs,
+  onUpdatePrefs,
+  onPlay,
+  onNotify,
+}: EpgGuideViewProps) {
   const [now, setNow] = useState(() => Date.now());
+  const [allLive, setAllLive] = useState<UnifiedMedia[]>(liveItems);
+  const [channelQuery, setChannelQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [programs, setPrograms] = useState<EpgProgram[]>([]);
-  const [epgUrlInput, setEpgUrlInput] = useState(prefs.epgUrls[0] || '');
+  const [epgUrlInput, setEpgUrlInput] = useState(
+    prefs.epgUrls[0] || activePlaylist?.epgUrl || ''
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<EpgProgram[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -40,22 +71,45 @@ export function EpgGuideView({ liveItems, prefs, onUpdatePrefs, onPlay, onNotify
   const [icons, setIcons] = useState<Record<string, string | null>>({});
   const [nowPlaying, setNowPlaying] = useState<Record<string, EpgProgram | null>>({});
   const [dataVersion, setDataVersion] = useState(0);
+  const searchReqRef = useRef(0);
 
-  // Horloge : la progression « En cours » avance sans recharger.
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const keys = useMemo(() => liveItems.map(epgKeyOf), [liveItems]);
+  useEffect(() => {
+    if (!epgUrlInput && activePlaylist?.epgUrl) setEpgUrlInput(activePlaylist.epgUrl);
+  }, [activePlaylist?.epgUrl]);
 
-  // Couverture, logos XMLTV et émission en cours pour les chaînes listées.
+  useEffect(() => {
+    if (!activePlaylist) {
+      setAllLive(liveItems);
+      return;
+    }
+    let cancelled = false;
+    queryFilteredCatalog(activePlaylist, {
+      type: 'live',
+      categoryName: null,
+      filters: ALL_LIVE_FILTERS,
+      limit: 2000,
+      offset: 0,
+    })
+      .then((res) => !cancelled && res.items.length > 0 && setAllLive(res.items))
+      .catch(() => !cancelled && setAllLive(liveItems));
+    return () => {
+      cancelled = true;
+    };
+  }, [activePlaylist, liveItems]);
+
+  const keys = useMemo(() => allLive.map(epgKeyOf), [allLive]);
+
   useEffect(() => {
     let cancelled = false;
     const t = Date.now();
     Promise.all([
       fetchEpgCoverage(keys, t, t + DAY_MS),
-      fetchEpgChannelIcons(keys.slice(0, 500)),
+      fetchEpgChannelIcons(keys.slice(0, 800)),
       fetchCurrentEpgForChannels(keys),
     ])
       .then(([cov, ico, cur]) => {
@@ -70,14 +124,13 @@ export function EpgGuideView({ liveItems, prefs, onUpdatePrefs, onPlay, onNotify
     };
   }, [keys, dataVersion]);
 
-  // Chaînes avec un guide en tête de liste.
-  const channels = useMemo(
-    () =>
-      liveItems
-        .map((ch) => ({ ch, key: epgKeyOf(ch) }))
-        .sort((a, b) => Number(covered.has(b.key)) - Number(covered.has(a.key))),
-    [liveItems, covered]
-  );
+  const channels = useMemo(() => {
+    const q = channelQuery.trim().toLowerCase();
+    return allLive
+      .filter((ch) => !q || ch.title.toLowerCase().includes(q) || ch.category.toLowerCase().includes(q))
+      .map((ch) => ({ ch, key: epgKeyOf(ch) }))
+      .sort((a, b) => Number(covered.has(b.key)) - Number(covered.has(a.key)));
+  }, [allLive, channelQuery, covered]);
 
   const selected =
     channels.find((c) => c.key === selectedKey) ?? channels.find((c) => covered.has(c.key)) ?? channels[0];
@@ -95,6 +148,21 @@ export function EpgGuideView({ liveItems, prefs, onUpdatePrefs, onPlay, onNotify
       cancelled = true;
     };
   }, [selected?.key, dataVersion]);
+
+  useEffect(() => {
+    const q = searchTerm.trim();
+    const reqId = ++searchReqRef.current;
+    if (q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void searchEpgGuide(q)
+        .then((res) => reqId === searchReqRef.current && setSearchResults(res))
+        .catch(() => reqId === searchReqRef.current && setSearchResults([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
 
   const refreshAfterImport = (message: string) => {
     setDataVersion((v) => v + 1);
@@ -117,6 +185,17 @@ export function EpgGuideView({ liveItems, prefs, onUpdatePrefs, onPlay, onNotify
     }
   };
 
+  const handleRemoveEpgUrl = async (urlToRemove: string) => {
+    const nextUrls = prefs.epgUrls.filter((u) => u !== urlToRemove);
+    if (isElectronRuntime()) {
+      await window.electron.clearEpgDataForSource?.(urlToRemove).catch(() => {});
+      await window.electron.reconcileEpgSources?.(nextUrls).catch(() => {});
+    }
+    await onUpdatePrefs({ epgUrls: nextUrls });
+    if (epgUrlInput === urlToRemove) setEpgUrlInput(nextUrls[0] || '');
+    refreshAfterImport('Source XMLTV retirée');
+  };
+
   const handleOpenXmltv = async () => {
     setSyncing(true);
     try {
@@ -129,106 +208,40 @@ export function EpgGuideView({ liveItems, prefs, onUpdatePrefs, onPlay, onNotify
     }
   };
 
-  const handleSearchEpg = async (q: string) => {
-    setSearchTerm(q);
-    if (q.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    setSearchResults(await searchEpgGuide(q).catch(() => []));
-  };
-
   const searching = searchTerm.trim().length >= 2;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 p-4 sm:p-6">
-      <div className="grid grid-cols-12 gap-4 rounded-[28px] border border-border bg-card p-5">
-        <div className="col-span-12 space-y-2 lg:col-span-7">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-            <CalendarRange className="size-4" />
-            Source du guide TV (XMLTV .xml / .xml.gz)
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              type="url"
-              value={epgUrlInput}
-              onChange={setEpgUrlInput}
-              placeholder="https://exemple.com/epg.xml.gz"
-              className="min-w-[220px] flex-1"
-            />
-            <Button size="md" variant="primary" disabled={syncing} onClick={handleSyncUrl}>
-              <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
-              Synchroniser
-            </Button>
-            <Button size="md" variant="secondary" disabled={syncing} onClick={handleOpenXmltv}>
-              <FolderOpen className="size-3.5" />
-              Fichier XMLTV
-            </Button>
-          </div>
-        </div>
-        <div className="col-span-12 space-y-2 lg:col-span-5">
-          <div className="text-xs font-semibold text-muted-foreground">Rechercher une émission</div>
-          <Input
-            value={searchTerm}
-            onChange={handleSearchEpg}
-            placeholder="Titre d'émission, journal, sport..."
-            leftIcon={<Search />}
-          />
-        </div>
-      </div>
+      <EpgSourceToolbar
+        epgUrlInput={epgUrlInput}
+        onEpgUrlInputChange={setEpgUrlInput}
+        savedUrls={prefs.epgUrls}
+        syncing={syncing}
+        onSyncUrl={() => void handleSyncUrl()}
+        onOpenXmltv={() => void handleOpenXmltv()}
+        onRemoveUrl={(u) => void handleRemoveEpgUrl(u)}
+        searchTerm={searchTerm}
+        onSearchTermChange={setSearchTerm}
+      />
 
       <div className="grid min-h-0 flex-1 grid-cols-12 gap-4">
-        <div className="col-span-12 max-h-[40vh] overflow-y-auto rounded-[26px] border border-border bg-card p-3 lg:col-span-4 lg:max-h-none">
-          <h2 className="mb-2.5 px-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            Chaînes ({liveItems.length.toLocaleString('fr-FR')}) · {covered.size.toLocaleString('fr-FR')} avec guide
-          </h2>
-          <div className="space-y-1">
-            {channels.map(({ ch, key }) => {
-              const active = selected?.key === key;
-              const current = nowPlaying[key];
-              const progress = current ? programProgress(current, now) : null;
-              return (
-                <button
-                  key={ch.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedKey(key);
-                    setSearchTerm('');
-                    setSearchResults([]);
-                  }}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors',
-                    active ? 'bg-elevated' : 'hover:bg-elevated',
-                    !covered.has(key) && 'opacity-60'
-                  )}
-                >
-                  <MediaArtwork
-                    src={ch.posterUrl}
-                    fallbackSrc={icons[key]}
-                    title={ch.title}
-                    kind="live"
-                    fit="contain"
-                    monogramSize="sm"
-                    className="size-9 shrink-0 rounded-lg border border-border bg-black"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className={cn('block truncate text-xs text-foreground', active && 'font-bold')}>
-                      {ch.title}
-                    </span>
-                    <span className="block truncate text-[11px] text-muted-foreground">
-                      {current ? current.title : covered.has(key) ? 'Programme à venir' : 'Pas de guide'}
-                    </span>
-                    {progress !== null ? (
-                      <span className="mt-1 block h-0.5 overflow-hidden rounded-full bg-border">
-                        <span className="block h-full bg-foreground/70" style={{ width: `${progress}%` }} />
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <EpgChannelSidebar
+          totalLiveCount={allLive.length}
+          coveredCount={covered.size}
+          channelQuery={channelQuery}
+          onChannelQueryChange={setChannelQuery}
+          channels={channels}
+          selectedKey={selected?.key}
+          covered={covered}
+          icons={icons}
+          nowPlaying={nowPlaying}
+          now={now}
+          onSelectChannel={(key) => {
+            setSelectedKey(key);
+            setSearchTerm('');
+            setSearchResults([]);
+          }}
+        />
 
         <div className="col-span-12 overflow-y-auto rounded-[26px] border border-border bg-card p-5 lg:col-span-8">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

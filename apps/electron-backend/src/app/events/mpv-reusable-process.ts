@@ -356,8 +356,21 @@ export class MpvReusableProcess {
         // which mpv applies to every later file too. A per-file `start`
         // (0 when nothing is resumed) keeps each load at its own offset.
         const fileOptions = [`start=${reuseStartSeconds(options.startTime)}`];
-        if (options.title) {
-            fileOptions.push(`force-media-title=${options.title}`);
+        const safeTitle = options.title
+            ? Array.from(options.title)
+                  .filter((ch) => {
+                      const c = ch.charCodeAt(0);
+                      return c > 0x1f && c !== 0x7f;
+                  })
+                  .join('')
+                  .trim()
+            : '';
+        if (safeTitle) {
+            const encodedTitle =
+                safeTitle.includes(',') || safeTitle.startsWith('%')
+                    ? `%${Buffer.byteLength(safeTitle, 'utf8')}%${safeTitle}`
+                    : safeTitle;
+            fileOptions.push(`force-media-title=${encodedTitle}`);
         }
         const loadFileArgs: Array<string | number> = [
             options.url,

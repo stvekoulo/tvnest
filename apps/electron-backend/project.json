@@ -34,11 +34,12 @@
                 "electron-backend:build-worker",
                 "electron-backend:build-embedded-mpv",
                 {
-                    "projects": ["web", "remote-control-web"],
+                    "projects": ["web"],
                     "target": "build"
                 }
             ],
             "executor": "nx-electron:build",
+            "defaultConfiguration": "production",
             "outputs": ["{options.outputPath}"],
             "inputs": [
                 "production",
@@ -85,6 +86,11 @@
                 ]
             },
             "configurations": {
+                "development": {
+                    "optimization": false,
+                    "extractLicenses": false,
+                    "inspect": false
+                },
                 "production": {
                     "optimization": true,
                     "extractLicenses": true,
@@ -110,80 +116,6 @@
                 }
             }
         },
-        "build-performance": {
-            "dependsOn": [
-                "electron-backend:build-worker-performance",
-                "electron-backend:build-embedded-mpv",
-                {
-                    "projects": ["web", "remote-control-web"],
-                    "target": "build-performance"
-                }
-            ],
-            "executor": "nx:run-commands",
-            "options": {
-                "command": "pnpm nx run electron-backend:build:electron-performance --excludeTaskDependencies"
-            }
-        },
-        "build-e2e": {
-            "dependsOn": [
-                "electron-backend:build-worker",
-                "electron-backend:build-embedded-mpv",
-                {
-                    "projects": ["web"],
-                    "target": "build-e2e"
-                },
-                {
-                    "projects": ["remote-control-web"],
-                    "target": "build-e2e"
-                }
-            ],
-            "executor": "nx-electron:build",
-            "outputs": ["{options.outputPath}"],
-            "inputs": [
-                "production",
-                "^production",
-                "{workspaceRoot}/apps/electron-backend/native/build/Release/**",
-                "{workspaceRoot}/tools/embedded-mpv/linux-source-archive-contract.cjs",
-                "{workspaceRoot}/tools/embedded-mpv/linux-source-archive-contract.d.cts",
-                "{workspaceRoot}/tools/embedded-mpv/runtime-probe-contract.cjs",
-                "{workspaceRoot}/tools/embedded-mpv/runtime-probe-contract.d.cts"
-            ],
-            "options": {
-                "outputPath": "dist/apps/electron-backend",
-                "main": "apps/electron-backend/src/main.entry.ts",
-                "additionalEntryPoints": [
-                    {
-                        "entryName": "main.app",
-                        "entryPath": "apps/electron-backend/src/main.ts"
-                    }
-                ],
-                "tsConfig": "apps/electron-backend/tsconfig.app.json",
-                "webpackConfig": "apps/electron-backend/webpack.config.cjs",
-                "assets": [
-                    "apps/electron-backend/src/assets",
-                    {
-                        "glob": "**/*",
-                        "input": "apps/electron-backend/native/build/Release",
-                        "output": "native",
-                        "ignore": [
-                            ".deps/**",
-                            "obj.target/**",
-                            "**/.deps/**",
-                            "**/obj.target/**",
-                            "obj/**",
-                            "**/obj/**",
-                            "**/*.pdb",
-                            "**/*.iobj",
-                            "**/*.ipdb",
-                            "**/*.ilk",
-                            "**/*.exp",
-                            "**/*.lib",
-                            "**/*.dll.a"
-                        ]
-                    }
-                ]
-            }
-        },
         "serve": {
             "executor": "nx:run-commands",
             "options": {
@@ -197,7 +129,7 @@
             ],
             "executor": "nx-electron:execute",
             "options": {
-                "buildTarget": "electron-backend:build",
+                "buildTarget": "electron-backend:build:development",
                 "waitUntilTargets": ["web:serve"],
                 "remoteDebuggingPort": 9222
             }
@@ -287,6 +219,5 @@
                 "jestConfig": "apps/electron-backend/jest.config.ts"
             }
         }
-    },
-    "tags": ["scope:electron", "domain:electron-main", "type:app"]
+    }
 }

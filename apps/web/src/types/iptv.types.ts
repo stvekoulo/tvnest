@@ -64,6 +64,7 @@ export interface UnifiedPlaylist {
   title: string;
   kind: PortalKind;
   url?: string;
+  portalUrl?: string;
   filePath?: string;
   serverUrl?: string;
   username?: string;
@@ -90,6 +91,7 @@ export interface UnifiedCategory {
   type: 'live' | 'movie' | 'series';
   count?: number;
   hidden?: boolean;
+  locked?: boolean;
 }
 
 export interface UnifiedMedia {
@@ -163,6 +165,7 @@ export interface AppPreferences {
   userAgent: string;
   autoplay: boolean;
   parentalLockEnabled: boolean;
+  parentalPinHash?: string;
   /** Vérifie et télécharge automatiquement les nouvelles releases GitHub. */
   autoUpdate: boolean;
   /** Actualisation des sources au démarrage : 0 = jamais, sinon tous les N jours (1 à 7). */

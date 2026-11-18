@@ -16,7 +16,7 @@ const NETWORK_RECOVERY_MAX = 3;
 const networkRecoveryDelayMs = (attempt: number) => 1000 * 2 ** (attempt - 1);
 const NETWORK_LOST_MESSAGE =
   'Connexion au flux perdue. Vérifiez votre connexion ou réessayez : le serveur IPTV est peut-être saturé.';
-const INCOMPATIBLE_MESSAGE = 'Flux incompatible avec le décodeur Web — activez libmpv ou MPV.';
+const INCOMPATIBLE_MESSAGE = 'Flux incompatible avec le décodeur Web : activez libmpv ou MPV.';
 
 interface StartWebEngineParams {
   resolved: ResolvedPortalPlayback;

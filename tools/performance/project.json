@@ -11,7 +11,7 @@
             "inputs": [
                 "{projectRoot}/*.mjs",
                 "{projectRoot}/*.json",
-                "{workspaceRoot}/.github/workflows/ci.yml",
+                "{workspaceRoot}/.github/workflows/build-windows.yml",
                 { "externalDependencies": ["parse5", "typescript"] }
             ],
             "options": {
@@ -23,7 +23,6 @@
             "inputs": [
                 "default",
                 "{workspaceRoot}/eslint.config.mjs",
-                "{workspaceRoot}/tools/eslint-rules/**/*",
                 "{workspaceRoot}/tools/eslint/**/*"
             ],
             "command": "eslint \"tools/performance/*.mjs\""

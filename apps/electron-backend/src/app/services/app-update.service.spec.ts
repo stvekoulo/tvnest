@@ -335,7 +335,7 @@ describe('AppUpdateService', () => {
             expect.objectContaining({
                 headers: expect.objectContaining({
                     Accept: 'application/vnd.github+json',
-                    'User-Agent': 'iptvnator/0.22.0',
+                    'User-Agent': 'tvnest/0.22.0',
                 }),
             })
         );

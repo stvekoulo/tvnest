@@ -34,6 +34,11 @@ import {
     fetchPlaylistFromUrl,
 } from './playlist-source';
 import { PlaylistWriteAuthorizer } from './playlist-write-authorization';
+import {
+    assertAuthorizedPlaylistReadPath,
+    authorizePlaylistReadPath,
+} from './playlist-read-authorization';
+import { databaseWorkerClient } from '../services/database-worker-client';
 import { createM3uImportPerformanceCapture } from './playlist-import-performance';
 import { isPerformanceCaptureEnabled } from '../services/debug-trace';
 
@@ -119,11 +124,39 @@ ipcMain.handle(
 
 ipcMain.handle(
     'update-playlist-from-file-path',
-    async (event, filePath, title) => {
+    async (_event, filePath, title) => {
         try {
-            return await fetchPlaylistFromFile(filePath, title);
+            const rawTrimmed =
+                typeof filePath === 'string' ? filePath.trim() : '';
+            let knownInDb = false;
+            if (rawTrimmed) {
+                try {
+                    const metas =
+                        await databaseWorkerClient.request(
+                            'DB_GET_APP_PLAYLIST_METAS',
+                            {}
+                        );
+                    knownInDb =
+                        Array.isArray(metas) &&
+                        metas.some(
+                            (p) =>
+                                typeof p?.filePath === 'string' &&
+                                p.filePath.trim() === rawTrimmed
+                        );
+                } catch {
+                    knownInDb = false;
+                }
+            }
+            const safePath = assertAuthorizedPlaylistReadPath(
+                filePath,
+                knownInDb
+            );
+            return await fetchPlaylistFromFile(safePath, title);
         } catch (error) {
-            console.error('Error reading playlist from file:', error);
+            console.error(
+                'Error reading playlist from file:',
+                redactSensitiveData(error)
+            );
             throw error;
         }
     }
@@ -144,6 +177,7 @@ ipcMain.handle('open-playlist-from-file', async () => {
     }
 
     const filePath = filePaths[0];
+    authorizePlaylistReadPath(filePath);
 
     try {
         const title = derivePlaylistTitleFromFilePath(filePath);

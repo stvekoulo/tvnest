@@ -1,53 +1,25 @@
-// Gestionnaires IPC Electron pour le filtrage avancé SQLite et les compteurs TVNest.
-import { ipcMain } from 'electron';
-import {
-    getCategoriesWithCounts,
-    getDashboardHighlights,
-    getPlaylistStreamCounts,
-    queryCatalog,
-} from '../../database/operations/catalog-filter.operations';
+// Gestionnaires IPC Electron délégués au worker SQLite pour le catalogue TVNest.
 import type { CatalogFilterQuery } from '../../database/operations/catalog-filter.types';
+import { handleWorkerRequest } from './worker-events.utils';
 
-const LOG_TAG = '[TVNest Catalog DB]';
+handleWorkerRequest('DB_QUERY_CATALOG', (query: CatalogFilterQuery) => query);
 
-ipcMain.handle('DB_QUERY_CATALOG', async (_event, query: CatalogFilterQuery) => {
-    try {
-        return await queryCatalog(query);
-    } catch (error) {
-        console.error(LOG_TAG, 'Error querying catalog:', error);
-        throw error;
-    }
-});
-
-ipcMain.handle(
+handleWorkerRequest(
     'DB_GET_CATEGORIES_WITH_COUNTS',
-    async (_event, playlistId: string, language?: string) => {
-        try {
-            return await getCategoriesWithCounts(playlistId, language);
-        } catch (error) {
-            console.error(LOG_TAG, 'Error getting categories with counts:', error);
-            throw error;
-        }
-    }
+    (playlistId: string, language?: string) => ({ playlistId, language })
 );
 
-ipcMain.handle('DB_GET_PLAYLIST_STREAM_COUNTS', async () => {
-    try {
-        return await getPlaylistStreamCounts();
-    } catch (error) {
-        console.error(LOG_TAG, 'Error getting playlist stream counts:', error);
-        throw error;
-    }
-});
+handleWorkerRequest('DB_GET_PLAYLIST_STREAM_COUNTS', () => ({}));
 
-ipcMain.handle(
+handleWorkerRequest(
     'DB_GET_DASHBOARD_HIGHLIGHTS',
-    async (_event, playlistId: string, preferredLanguage?: string) => {
-        try {
-            return await getDashboardHighlights(playlistId, preferredLanguage);
-        } catch (error) {
-            console.error(LOG_TAG, 'Error getting dashboard highlights:', error);
-            throw error;
-        }
-    }
+    (playlistId: string, preferredLanguage?: string) => ({
+        playlistId,
+        preferredLanguage,
+    })
+);
+
+handleWorkerRequest(
+    'DB_SET_CATEGORY_LOCKED',
+    (categoryId: number, locked: boolean) => ({ categoryId, locked })
 );

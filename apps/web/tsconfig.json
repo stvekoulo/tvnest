@@ -11,6 +11,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": false,
+    "ignoreDeprecations": "6.0",
+    "rootDir": "../..",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],

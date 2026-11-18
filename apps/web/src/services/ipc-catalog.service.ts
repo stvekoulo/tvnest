@@ -1,10 +1,7 @@
 // Service de requêtage SQLite avancé, catégories comptées et temps forts TVNest.
-import { isLikelyM3uVod } from '@iptvnator/shared/m3u-utils';
 import { stripEmoji } from '@/lib/utils';
-import {
-  getFallbackRawPlaylist,
-  isElectronRuntime,
-} from '@/services/ipc-playlists.service';
+import { loadFallbackM3uCatalog } from '@/services/catalog-fallback.service';
+import { isElectronRuntime } from '@/services/ipc-playlists.service';
 import type {
   DbCatalogQueryPayload,
   DbCatalogRow,
@@ -84,6 +81,7 @@ export async function fetchCategoriesWithCounts(
       type: c.type,
       count: c.stream_count,
       hidden: Boolean(c.hidden),
+      locked: Boolean(c.locked),
     }));
   }
   const fallback = await loadFallbackM3uCatalog(playlist);
@@ -138,7 +136,6 @@ export async function withSavedProgress(playlistId: string, rows: UnifiedMedia[]
   const positions = await window.electron.dbGetRecentPlaybackPositions(playlistId, 200).catch(() => []);
   const movies = new Map<number, (typeof positions)[number]>();
   const series = new Map<number, (typeof positions)[number]>();
-  // Triées de la plus récente à la plus ancienne : la première rencontrée l'emporte.
   for (const p of positions) {
     if (p.contentType === 'vod' && !movies.has(p.contentXtreamId)) movies.set(p.contentXtreamId, p);
     if (p.contentType === 'episode' && p.seriesXtreamId && !series.has(p.seriesXtreamId)) {
@@ -156,7 +153,6 @@ export async function queryFilteredCatalog(
   playlist: UnifiedPlaylist,
   options: {
     type: 'live' | 'movie' | 'series' | 'all';
-    // Le backend filtre par nom de groupe (`cat.name`), pour Xtream comme pour M3U.
     categoryName: string | null;
     filters: CatalogFilterState;
     onlyRecent?: boolean;
@@ -203,7 +199,7 @@ export async function queryFilteredCatalog(
     return {
       items: (res.items || []).map((r) => mapDbCatalogRow(playlist, r)),
       total: res.total || 0,
-      years: [],
+      years: res.years || [],
       tookMs: res.tookMs || 0,
     };
   }
@@ -228,70 +224,7 @@ export async function queryFilteredCatalog(
   };
 }
 
-async function loadFallbackM3uCatalog(playlist: UnifiedPlaylist): Promise<{
-  categories: UnifiedCategory[];
-  items: UnifiedMedia[];
-}> {
-  const full = getFallbackRawPlaylist(playlist.id);
-  const rawItems = (full?.playlist?.items || []) as Array<{
-    name?: string;
-    url?: string;
-    tvg?: { id?: string; logo?: string };
-    group?: { title?: string };
-    http?: { 'user-agent'?: string; referrer?: string };
-  }>;
-  const favSet = new Set<string>(
-    Array.isArray(full?.favorites) ? (full.favorites as string[]) : []
-  );
-  const catCounts = new Map<
-    string,
-    { type: 'live' | 'movie'; count: number }
-  >();
-  const items: UnifiedMedia[] = rawItems
-    .filter((it) => Boolean(it?.url && it?.name))
-    .map((it, idx) => {
-      const cat = it.group?.title?.trim() || 'Non classé';
-      const kind: 'live' | 'movie' = isLikelyM3uVod({
-        url: it.url || '',
-        radio: 'false',
-      })
-        ? 'movie'
-        : 'live';
-      const prev = catCounts.get(cat);
-      catCounts.set(cat, { type: kind, count: (prev?.count || 0) + 1 });
-      return {
-        id: `${playlist.id}-m3u-${idx}`,
-        playlistId: playlist.id,
-        playlistTitle: playlist.title,
-        portalKind: playlist.kind,
-        kind,
-        title: stripEmoji(it.name) || `Flux ${idx + 1}`,
-        category: stripEmoji(cat),
-        categoryId: cat,
-        posterUrl: it.tvg?.logo || undefined,
-        backdropUrl: it.tvg?.logo || undefined,
-        streamUrl: it.url,
-        tvgId: it.tvg?.id || undefined,
-        isFavorite: favSet.has(it.url || `${playlist.id}-${idx}`),
-        userAgent: it.http?.['user-agent'] || playlist.userAgent,
-        referrer: it.http?.referrer || undefined,
-      };
-    });
-
-  const categories: UnifiedCategory[] = Array.from(catCounts.entries()).map(
-    ([name, meta]) => ({
-      id: name,
-      name: stripEmoji(name),
-      rawName: name,
-      type: meta.type,
-      count: meta.count,
-    })
-  );
-  return { categories, items };
-}
-
-// Recherche dans toutes les sources de la base (Live, Films, Séries), sans filtre de langue
-// ni de groupe : utilisée par la recherche lancée depuis l'Accueil.
+// Recherche dans toutes les sources de la base (Live, Films, Séries).
 export async function searchAllSources(
   playlists: UnifiedPlaylist[],
   query: string,

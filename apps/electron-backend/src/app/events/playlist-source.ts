@@ -29,6 +29,7 @@ export interface PlaylistFetchOptions {
  * Mirrored by the playlist refresh worker.
  */
 export const PLAYLIST_FETCH_TIMEOUT_MS = 30000;
+export const PLAYLIST_MAX_BYTES = 150 * 1024 * 1024;
 
 function countPlaylistItems(value: unknown): number | undefined {
     try {
@@ -100,8 +101,13 @@ export async function fetchPlaylistFromUrl(
                 method: 'GET',
                 ...(userAgent ? { headers: { 'User-Agent': userAgent } } : {}),
                 timeout: PLAYLIST_FETCH_TIMEOUT_MS,
+                maxContentLength: PLAYLIST_MAX_BYTES,
+                maxBodyLength: PLAYLIST_MAX_BYTES,
             },
-            { allowPrivateNetworks: true }
+            {
+                allowPrivateNetworks: true,
+                allowPrivateNetworkRedirects: false,
+            }
         );
     let result;
     try {

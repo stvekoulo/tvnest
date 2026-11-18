@@ -5,6 +5,7 @@ import type {
   PlayerContentInfo,
   ResolvedPortalPlayback,
 } from '@iptvnator/shared/interfaces';
+import { shouldOfferResume } from '@/lib/resume-point';
 import { buildXtreamStreamUrl } from '@/services/ipc-catalog.service';
 import { isElectronRuntime } from '@/services/ipc-playlists.service';
 import { fetchXtreamMovieDetail } from '@/services/ipc-series.service';
@@ -17,6 +18,13 @@ function cleanStalkerCmdUrl(rawCmd: string): string {
     .trim()
     .replace(/^(?:ffrt\d*|ffmpeg)\s+/i, '')
     .trim();
+}
+
+function needsStalkerCreateLink(rawCmd: string, cleaned: string): boolean {
+  if (!rawCmd.trim()) return false;
+  if (/^(?:ffrt\d*|ffmpeg)\s+/i.test(rawCmd.trim())) return true;
+  if (!/^https?:\/\//i.test(cleaned)) return true;
+  return /\/play\/|play_token=|stream=&/i.test(cleaned);
 }
 
 // Détecte et prépare le moteur libmpv embarqué (frame-copy WebGL2 ou HWND natif).
@@ -47,29 +55,65 @@ export async function probeEmbeddedMpvSupport(
   }
 }
 
-async function resolveStalkerStreamUrl(
+async function negotiateStalkerToken(
+  portalUrl: string,
+  macAddress: string,
+  serialNumber?: string
+): Promise<string | undefined> {
+  const hs = await window.electron.stalkerRequest({
+    url: portalUrl,
+    macAddress,
+    serialNumber,
+    params: { type: 'stb', action: 'handshake', JsHttpRequest: '1-xml' },
+  });
+  return (hs as { js?: { token?: string } })?.js?.token;
+}
+
+async function resolveStalkerPlayback(
   rawUrl: string,
   kind: UnifiedMedia['kind'],
   playlist?: UnifiedPlaylist | null
-): Promise<string> {
+): Promise<{
+  streamUrl: string;
+  cookie?: string;
+  authorization?: string;
+}> {
   const cleaned = cleanStalkerCmdUrl(rawUrl);
-  if (
-    !isElectronRuntime() ||
-    !playlist?.macAddress ||
-    (!rawUrl.startsWith('ff') && cleaned.startsWith('http') && !cleaned.includes('play/live.php'))
-  ) {
-    return cleaned;
+  if (!isElectronRuntime() || !playlist?.macAddress) {
+    return { streamUrl: cleaned };
   }
 
-  const portalUrl = playlist.url || playlist.serverUrl;
-  if (!portalUrl) return cleaned;
+  const cookie = `mac=${encodeURIComponent(playlist.macAddress)}; stb_lang=en; timezone=Europe%2FParis`;
+  const portalUrl = playlist.portalUrl || playlist.url || playlist.serverUrl;
+  if (!portalUrl) {
+    return {
+      streamUrl: cleaned,
+      cookie,
+      authorization: playlist.token ? `Bearer ${playlist.token}` : undefined,
+    };
+  }
 
-  try {
-    const response = await window.electron.stalkerRequest({
+  let token = playlist.token;
+  if (!token) {
+    token = await negotiateStalkerToken(portalUrl, playlist.macAddress, playlist.serialNumber).catch(
+      () => undefined
+    );
+  }
+
+  if (!needsStalkerCreateLink(rawUrl, cleaned)) {
+    return {
+      streamUrl: cleaned,
+      cookie,
+      authorization: token ? `Bearer ${token}` : undefined,
+    };
+  }
+
+  const requestCreateLink = (activeToken?: string) =>
+    window.electron.stalkerRequest({
       url: portalUrl,
-      macAddress: playlist.macAddress,
+      macAddress: playlist.macAddress as string,
       serialNumber: playlist.serialNumber,
-      token: playlist.token,
+      token: activeToken,
       params: {
         type: kind === 'live' ? 'itv' : 'vod',
         action: 'create_link',
@@ -79,14 +123,30 @@ async function resolveStalkerStreamUrl(
         JsHttpRequest: '1-xml',
       },
     });
-    const js = (response as { js?: { cmd?: unknown } })?.js;
-    if (js && typeof js.cmd === 'string' && js.cmd.trim()) {
-      return cleanStalkerCmdUrl(js.cmd);
+
+  try {
+    let response = await requestCreateLink(token);
+    if ('stalkerAuthFailure' in response) {
+      token = await negotiateStalkerToken(portalUrl, playlist.macAddress, playlist.serialNumber);
+      response = await requestCreateLink(token);
     }
+    const js = (response as { js?: { cmd?: unknown } })?.js;
+    const resolvedUrl =
+      js && typeof js.cmd === 'string' && js.cmd.trim()
+        ? cleanStalkerCmdUrl(js.cmd)
+        : cleaned;
+    return {
+      streamUrl: resolvedUrl,
+      cookie,
+      authorization: token ? `Bearer ${token}` : undefined,
+    };
   } catch {
-    return cleaned;
+    return {
+      streamUrl: cleaned,
+      cookie,
+      authorization: token ? `Bearer ${token}` : undefined,
+    };
   }
-  return cleaned;
 }
 
 // Résout l'URL finale, l'extension réelle (.mkv/.mp4/.ts/.m3u8), les headers et le point de reprise.
@@ -108,6 +168,8 @@ export async function resolveMediaPlayback(
 
   let streamUrl = activeItem.streamUrl || '';
   let liveAutoTsUrl: string | undefined;
+  let stalkerCookie: string | undefined;
+  let stalkerAuth: string | undefined;
 
   if (
     activeItem.portalKind === 'xtream' &&
@@ -128,11 +190,14 @@ export async function resolveMediaPlayback(
       'ts'
     );
   } else if (activeItem.portalKind === 'stalker' && streamUrl) {
-    streamUrl = await resolveStalkerStreamUrl(
+    const stalker = await resolveStalkerPlayback(
       streamUrl,
       activeItem.kind,
       playlist
     );
+    streamUrl = stalker.streamUrl;
+    stalkerCookie = stalker.cookie;
+    stalkerAuth = stalker.authorization;
   }
 
   const userAgent =
@@ -143,6 +208,21 @@ export async function resolveMediaPlayback(
   const headers: Record<string, string> = {};
   if (userAgent) headers['User-Agent'] = userAgent;
   if (referer) headers.Referer = referer;
+  if (stalkerCookie) headers.Cookie = stalkerCookie;
+  if (stalkerAuth) headers.Authorization = stalkerAuth;
+
+  if (
+    isElectronRuntime() &&
+    /^https?:\/\//i.test(streamUrl) &&
+    (stalkerCookie || stalkerAuth)
+  ) {
+    window.electron
+      .setUserAgent?.(userAgent || null, referer || null, streamUrl, {
+        authorization: stalkerAuth || null,
+        cookie: stalkerCookie || null,
+      })
+      .catch(() => {});
+  }
 
   const contentInfo: PlayerContentInfo | undefined =
     activeItem.xtreamId && activeItem.kind !== 'live'
@@ -158,8 +238,8 @@ export async function resolveMediaPlayback(
 
   const startTime =
     activeItem.kind !== 'live' &&
-    activeItem.progressSeconds &&
-    activeItem.progressSeconds > 5
+    activeItem.progressSeconds !== undefined &&
+    shouldOfferResume(activeItem.progressSeconds, activeItem.durationSeconds)
       ? Math.floor(activeItem.progressSeconds)
       : undefined;
 

@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { clearCachedRails } from '@/hooks/use-section-rails';
 import { clearCachedPages } from '@/services/catalog-page-cache';
-import { refreshXtreamPortal } from '@/services/ipc-portals.service';
+import { refreshStalkerPortal, refreshXtreamPortal } from '@/services/ipc-portals.service';
 import {
   fetchSourceRefreshTimes,
   isElectronRuntime,
@@ -12,7 +12,6 @@ import {
 import type { UnifiedPlaylist } from '@/types/iptv.types';
 
 const DAY_MS = 86_400_000;
-// Laisse l'interface et le catalogue se charger avant de lancer des téléchargements lourds.
 const STARTUP_DELAY_MS = 15_000;
 
 export function isSourceRefreshDue(lastRefreshMs: number, days: number, now = Date.now()): boolean {
@@ -21,7 +20,6 @@ export function isSourceRefreshDue(lastRefreshMs: number, days: number, now = Da
 
 interface SourceAutoRefreshOptions {
   playlists: UnifiedPlaylist[];
-  /** 0 = désactivé, sinon intervalle en jours (1 à 7). */
   days: number;
   onRefreshed: () => Promise<void>;
   notify: (msg: string) => void;
@@ -35,7 +33,6 @@ export function useSourceAutoRefresh({
   notify,
   setSyncLabel,
 }: SourceAutoRefreshOptions) {
-  // Une seule passe par lancement de l'application, marquée au moment où elle démarre.
   const startedRef = useRef(false);
   const latestRef = useRef({ playlists, onRefreshed, notify, setSyncLabel });
   latestRef.current = { playlists, onRefreshed, notify, setSyncLabel };
@@ -47,8 +44,9 @@ export function useSourceAutoRefresh({
       if (startedRef.current) return;
       startedRef.current = true;
       const { playlists, onRefreshed, notify, setSyncLabel } = latestRef.current;
-      // Seules ces sources ont une origine à re-télécharger (texte collé et Stalker n'en ont pas).
-      const candidates = playlists.filter((p) => ['m3u-url', 'm3u-file', 'xtream'].includes(p.kind));
+      const candidates = playlists.filter((p) =>
+        ['m3u-url', 'm3u-file', 'xtream', 'stalker'].includes(p.kind)
+      );
       const times = await fetchSourceRefreshTimes().catch(() => ({} as Record<string, number>));
       const due = candidates.filter((p) => isSourceRefreshDue(times[p.id] ?? 0, days));
       if (due.length === 0) return;
@@ -56,12 +54,19 @@ export function useSourceAutoRefresh({
       setSyncLabel(`Actualisation de ${due.length} source(s)...`);
       const done: string[] = [];
       try {
-        const m3uIds = due.filter((p) => p.kind !== 'xtream').map((p) => p.id);
+        const m3uIds = due
+          .filter((p) => p.kind === 'm3u-url' || p.kind === 'm3u-file')
+          .map((p) => p.id);
         done.push(...(await refreshM3uPlaylists(m3uIds).catch(() => [])));
         for (const portal of due.filter((p) => p.kind === 'xtream')) {
           setSyncLabel(`Actualisation de « ${portal.title} »...`);
           const ok = await refreshXtreamPortal(portal).then(() => true, () => false);
           if (ok) done.push(portal.id);
+        }
+        for (const stalker of due.filter((p) => p.kind === 'stalker')) {
+          setSyncLabel(`Actualisation de « ${stalker.title} »...`);
+          const ok = await refreshStalkerPortal(stalker).then(() => true, () => false);
+          if (ok) done.push(stalker.id);
         }
       } finally {
         setSyncLabel(null);

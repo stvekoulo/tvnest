@@ -30,7 +30,28 @@ export const EMBEDDED_MPV_FORBIDDEN_OPTION_KEYS: readonly string[] = [
     'config',
     'include',
     'terminal',
+    'script',
+    'scripts',
+    'scripts-append',
+    'scripts-add',
+    'scripts-pre',
+    'script-opts',
+    'script-opts-append',
+    'script-opts-add',
+    'load-scripts',
+    'ytdl',
+    'ytdl-raw-options',
+    'log-file',
+    'dump-stats',
+    'stream-record',
+    'input-conf',
+    'input-commands',
+    'o',
 ];
+
+const FORBIDDEN_OPTION_KEYS_LOWER = new Set(
+    EMBEDDED_MPV_FORBIDDEN_OPTION_KEYS.map((key) => key.toLowerCase())
+);
 
 /**
  * Applied to every embedded session ahead of the user's options, on every
@@ -124,7 +145,7 @@ export function validateEmbeddedMpvExtraOptions(
                 .filter(
                     (key): key is string =>
                         key !== undefined &&
-                        EMBEDDED_MPV_FORBIDDEN_OPTION_KEYS.includes(key)
+                        FORBIDDEN_OPTION_KEYS_LOWER.has(key.toLowerCase())
                 )
         ),
     ];
@@ -148,7 +169,8 @@ export function resolveEmbeddedMpvSessionOptionArguments(
 ): string[] {
     const userOptions = parseEmbeddedMpvExtraOptions(value)
         .filter(
-            (option) => !EMBEDDED_MPV_FORBIDDEN_OPTION_KEYS.includes(option.key)
+            (option) =>
+                !FORBIDDEN_OPTION_KEYS_LOWER.has(option.key.toLowerCase())
         )
         .map((option) => `${option.key}=${option.value}`);
     return [...EMBEDDED_MPV_NETWORK_DEFAULT_OPTIONS, ...userOptions];

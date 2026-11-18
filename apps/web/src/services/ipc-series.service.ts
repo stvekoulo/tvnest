@@ -75,7 +75,10 @@ export async function fetchXtreamMovieDetail(
     return {
       ...cached,
       isFavorite: movie.isFavorite,
-      progressSeconds: pos?.positionSeconds ?? cached.progressSeconds,
+      progressSeconds:
+        movie.progressSeconds === 0
+          ? 0
+          : (pos?.positionSeconds ?? cached.progressSeconds),
       durationSeconds: pos?.durationSeconds ?? cached.durationSeconds,
     };
   }
@@ -131,11 +134,14 @@ export async function fetchXtreamMovieDetail(
     youtubeTrailer: info.youtube_trailer
       ? String(info.youtube_trailer)
       : undefined,
-    progressSeconds: pos?.positionSeconds ?? movie.progressSeconds,
+    progressSeconds:
+      movie.progressSeconds === 0
+        ? 0
+        : (pos?.positionSeconds ?? movie.progressSeconds),
     durationSeconds: pos?.durationSeconds ?? movie.durationSeconds,
   };
 
-  vodDetailCache.set(cacheKey, enriched);
+  vodDetailCache.set(cacheKey, { ...enriched, progressSeconds: pos?.positionSeconds });
   return enriched;
 }
 

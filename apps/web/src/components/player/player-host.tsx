@@ -1,6 +1,4 @@
-// Lecteur unique de l'application. Il est monté une seule fois puis déplacé dans le DOM
-// (sans être recréé) entre l'emplacement actif (<PlayerSlot>) et le mode Cinéma plein écran :
-// aucun rechargement du flux ni retour au début quand on change de vue.
+// Lecteur unique de l'application, déplacé dans le DOM entre <PlayerSlot> et le mode Cinéma.
 import {
   createContext,
   type ReactNode,
@@ -18,25 +16,18 @@ import { cn } from '@/lib/utils';
 import { hasNativeWindowFullscreen, isAppFullscreen } from '@/lib/app-fullscreen';
 import type { UnifiedMedia, UnifiedPlaylist } from '@/types/iptv.types';
 
-// Délai avant de démonter le lecteur quand plus aucun emplacement n'est affiché : laisse
-// le temps à la vue suivante de monter le sien (fermeture du Cinéma, changement de page).
 const UNMOUNT_GRACE_MS = 200;
 
 interface SlotInfo {
   el: HTMLElement;
-  /** Aperçu sans console (la carte hôte dessine ses propres contrôles). */
   compact: boolean;
 }
 
-// Plein écran pour le mode Cinéma (voir lib/app-fullscreen).
-// `ownsFullscreen` : on ne quitte que le plein écran que le Cinéma a lui-même activé
-// (une fenêtre déjà en plein écran via F11 le reste à la fermeture du Cinéma).
 let ownsFullscreen = false;
+let fullscreenChain: Promise<unknown> = Promise.resolve();
 
 /** À appeler dans le clic qui ouvre le Cinéma (le mode Web exige un geste utilisateur). */
 export function requestAppFullscreen(): void {
-  // Le clic et l'effet de secours appellent tous deux cette fonction : une seule demande,
-  // sinon deux bascules natives se succèdent et la fenêtre revient à son état initial.
   if (ownsFullscreen) return;
   ownsFullscreen = true;
   if (!hasNativeWindowFullscreen()) {
@@ -49,13 +40,19 @@ export function requestAppFullscreen(): void {
     });
     return;
   }
-  void isAppFullscreen().then((already) => {
-    if (already) {
+  fullscreenChain = fullscreenChain
+    .then(async () => {
+      if (!ownsFullscreen) return;
+      const already = await isAppFullscreen();
+      if (already) {
+        ownsFullscreen = false;
+        return;
+      }
+      await window.electron.toggleFullScreenWindow();
+    })
+    .catch(() => {
       ownsFullscreen = false;
-      return;
-    }
-    return window.electron.toggleFullScreenWindow();
-  });
+    });
 }
 
 function releaseAppFullscreen(): void {
@@ -65,7 +62,13 @@ function releaseAppFullscreen(): void {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     return;
   }
-  void isAppFullscreen().then((on) => (on ? window.electron.toggleFullScreenWindow() : undefined));
+  fullscreenChain = fullscreenChain
+    .then(async () => {
+      if (ownsFullscreen) return;
+      const on = await isAppFullscreen();
+      if (on) await window.electron.toggleFullScreenWindow();
+    })
+    .catch(() => {});
 }
 
 type RegisterSlot = (slot: SlotInfo | null, el?: HTMLElement) => void;
@@ -88,9 +91,9 @@ interface PlayerHostProps {
   playlist?: UnifiedPlaylist | null;
   playing: boolean;
   onPlayingChange: (v: boolean) => void;
+  embeddedMpvEnabled?: boolean;
   theaterOpen: boolean;
   onTheaterChange: (open: boolean) => void;
-  /** Croix du lecteur (Cinéma ou fiche film/série) : arrête la lecture partout. */
   onStop: () => void;
   onOpenExternal: (player: 'mpv' | 'vlc', item: UnifiedMedia, positionSeconds: number) => void;
   nextEpisode: UnifiedMedia | null;
@@ -103,6 +106,7 @@ export function PlayerHost({
   playlist,
   playing,
   onPlayingChange,
+  embeddedMpvEnabled = true,
   theaterOpen,
   onTheaterChange,
   onStop,
@@ -141,20 +145,15 @@ export function PlayerHost({
     window.dispatchEvent(new Event(PLAYER_MOVED_EVENT));
   }, [target, node]);
 
-  // Le mode Cinéma est le vrai plein écran de la fenêtre ; en sortir (Échap, F, bouton) le
-  // referme. La demande part du clic lui-même (geste utilisateur exigé par le navigateur) ;
-  // l'effet couvre les ouvertures déclenchées par le code (lecture lancée en Cinéma).
   const openTheater = useCallback(() => {
     requestAppFullscreen();
     onTheaterChange(true);
   }, [onTheaterChange]);
   useEffect(() => {
     if (theaterOpen) requestAppFullscreen();
+    else releaseAppFullscreen();
   }, [theaterOpen]);
-  useEffect(() => {
-    if (!theaterOpen) releaseAppFullscreen();
-  }, [theaterOpen]);
-  // Sortie du plein écran par l'utilisateur (Échap, F11, système) : le Cinéma se referme.
+
   useEffect(() => {
     const onExit = () => {
       if (!ownsFullscreen) return;
@@ -189,6 +188,7 @@ export function PlayerHost({
               playlist={playlist}
               playing={playing}
               onPlayingChange={onPlayingChange}
+              preferWebEngine={!embeddedMpvEnabled}
               compact={!theaterOpen && (slot?.compact ?? true)}
               onExpandTheater={theaterOpen ? undefined : openTheater}
               onCloseTheater={theaterOpen ? () => onTheaterChange(false) : undefined}

@@ -1,15 +1,16 @@
 // Séparation des données de TVNest et d'IPTVnator.
-//
-// Jusqu'à la 1.0.2, TVNest utilisait le profil Electron d'IPTVnator (app.setName('iptvnator'))
-// et sa base SQLite (~/.iptvnator/databases/iptvnator.db) : regarder un film dans l'un se
-// voyait dans l'autre. TVNest a maintenant son propre profil (%APPDATA%\TVNest) et sa propre
-// base (~/.tvnest/databases/tvnest.db). Au premier lancement, les données actuelles sont
-// copiées une seule fois pour que TVNest garde ses sources, favoris et historique ; ensuite
-// les deux applications sont indépendantes. IPTVnator n'est jamais modifié.
 import type BetterSqlite3 from 'better-sqlite3';
-import { copyFileSync, cpSync, existsSync, renameSync, writeFileSync } from 'fs';
+import {
+    copyFileSync,
+    cpSync,
+    existsSync,
+    mkdirSync,
+    renameSync,
+    statSync,
+    writeFileSync,
+} from 'fs';
 import { homedir } from 'os';
-import { join, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import {
     getIptvnatorDatabasePath,
     IPTVNATOR_DATA_DIR_ENV,
@@ -17,8 +18,13 @@ import {
 } from '@iptvnator/shared/database/path-utils';
 
 const PROFILE_MARKER = '.tvnest-profile-separated';
-// Données du site (préférences TVNest, stockage local) ; les caches se reconstruisent.
-const PROFILE_ENTRIES = ['Local Storage', 'IndexedDB', 'Session Storage'];
+const PROFILE_ENTRIES = [
+    'Local Storage',
+    'IndexedDB',
+    'Session Storage',
+    'config.json',
+    'download-directory-authorization.json',
+];
 const LEGACY_PROFILE_NAMES = ['IPTVnator', 'iptvnator'];
 
 function hasDataOverride(): boolean {
@@ -28,9 +34,11 @@ function hasDataOverride(): boolean {
     );
 }
 
-/** Copie unique du stockage du site depuis le profil partagé avec IPTVnator. */
+/** Copie unique du stockage et de la configuration depuis le profil partagé avec IPTVnator. */
 export function separateTvnestProfile(appData: string, userData: string): void {
     if (hasDataOverride() || existsSync(join(userData, PROFILE_MARKER))) return;
+    mkdirSync(userData, { recursive: true });
+
     const legacy = LEGACY_PROFILE_NAMES.map((name) => join(appData, name)).find(
         (dir) => existsSync(dir) && resolve(dir) !== resolve(userData)
     );
@@ -39,9 +47,14 @@ export function separateTvnestProfile(appData: string, userData: string): void {
             const source = join(legacy, entry);
             if (!existsSync(source)) continue;
             const target = join(userData, entry);
-            // Rien n'est supprimé : un ancien stockage TVNest est gardé à côté.
-            if (existsSync(target)) renameSync(target, `${target}.avant-separation`);
-            cpSync(source, target, { recursive: true });
+            if (existsSync(target)) {
+                renameSync(target, `${target}.avant-separation`);
+            }
+            if (statSync(source).isDirectory()) {
+                cpSync(source, target, { recursive: true });
+            } else {
+                copyFileSync(source, target);
+            }
         }
     }
     writeFileSync(join(userData, PROFILE_MARKER), new Date().toISOString());
@@ -53,11 +66,14 @@ export function separateTvnestDatabase(): 'copied' | 'skipped' {
     const target = getIptvnatorDatabasePath();
     const legacy = join(homedir(), '.iptvnator', 'databases', 'iptvnator.db');
     if (existsSync(target) || !existsSync(legacy)) return 'skipped';
+    mkdirSync(dirname(target), { recursive: true });
     try {
-        // VACUUM INTO lit un instantané cohérent, même si IPTVnator écrit en même temps.
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const Database: typeof BetterSqlite3 = require('better-sqlite3');
-        const db = new Database(legacy, { readonly: true, fileMustExist: true });
+        const db = new Database(legacy, {
+            readonly: true,
+            fileMustExist: true,
+        });
         try {
             db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`);
         } finally {
@@ -65,7 +81,9 @@ export function separateTvnestDatabase(): 'copied' | 'skipped' {
         }
     } catch {
         for (const suffix of ['', '-wal', '-shm']) {
-            if (existsSync(legacy + suffix)) copyFileSync(legacy + suffix, target + suffix);
+            if (existsSync(legacy + suffix)) {
+                copyFileSync(legacy + suffix, target + suffix);
+            }
         }
     }
     return 'copied';

@@ -1,3 +1,4 @@
+import { redactSensitiveData } from '@iptvnator/shared/logging';
 import {
     EmbeddedMpvFrameSource,
     ResolvedPortalPlayback,
@@ -155,7 +156,9 @@ export function applyHelperEvent(
                 console.error(
                     `[embedded-mpv-fc][${session.id}][mpv/${String(
                         event.prefix ?? ''
-                    )}] ${String(event.text ?? '').trim()}`
+                    )}] ${String(
+                        redactSensitiveData(String(event.text ?? '').trim())
+                    )}`
                 );
             } else if (event.level === 'warn' && event.prefix === 'iptvnator') {
                 // The helper's own warnings (a session option libmpv
@@ -164,8 +167,8 @@ export function applyHelperEvent(
                 // filtered.
                 console.warn(
                     `[embedded-mpv-fc][${session.id}] ${String(
-                        event.text ?? ''
-                    ).trim()}`
+                        redactSensitiveData(String(event.text ?? '').trim())
+                    )}`
                 );
             }
             break;

@@ -50,7 +50,10 @@ export async function probeM3uSource(
                     },
                     validateStatus: () => true,
                 },
-                { allowPrivateNetworks: true }
+                {
+                    allowPrivateNetworks: true,
+                    allowPrivateNetworkRedirects: false,
+                }
             );
             stream = response.data;
             if (ranged && [400, 405, 416].includes(response.status)) {

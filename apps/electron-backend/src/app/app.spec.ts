@@ -382,7 +382,7 @@ describe('Electron app security helpers', () => {
             expect(BrowserWindow).toHaveBeenCalledWith(
                 expect.objectContaining({
                     show: false,
-                    backgroundColor: '#1f1f23',
+                    backgroundColor: '#040407',
                 })
             );
             const [loadHandler] = mainWindow.webContents.once.mock.calls

@@ -190,10 +190,16 @@ export class AppUpdateService {
         );
         const releaseFetcher: ReleaseFetcher =
             options.releaseFetcher ??
-            ((url, init) => fetch(url, init) as Promise<ReleaseFetchResponse>);
+            ((url, init) =>
+                fetch(url, {
+                    ...init,
+                    signal:
+                        (init as RequestInit | undefined)?.signal ??
+                        AbortSignal.timeout(15_000),
+                }) as Promise<ReleaseFetchResponse>);
         this.catalogs = new AppUpdateReleaseCatalogs(
             releaseFetcher,
-            `iptvnator/${this.currentVersion}`
+            `tvnest/${this.currentVersion}`
         );
         this.status = {
             currentVersion: this.currentVersion,

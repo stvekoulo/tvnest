@@ -81,7 +81,10 @@ export function Switch({
             ref={thumbRef}
             layout
             animate={{ scale: squish ? 0.9 : 1 }}
-            className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm"
+            className={cn(
+              'pointer-events-none block h-4 w-4 rounded-full shadow-sm transition-colors',
+              checked ? 'bg-primary-foreground' : 'bg-foreground/75'
+            )}
           >
             <div
               className={cn('size-4', squish && (checked ? 'ml-0.5' : 'mr-0.5'))}

@@ -27,7 +27,7 @@ export default [
     ...nx.configs['flat/typescript'],
     ...nx.configs['flat/javascript'],
     {
-        ignores: ['**/dist', '**/.astro'],
+        ignores: ['**/dist', '**/.pnpm-cli'],
     },
     {
         files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
@@ -41,47 +41,6 @@ export default [
                         {
                             sourceTag: 'type:app',
                             onlyDependOnLibsWithTags: [
-                                'type:feature',
-                                'type:ui',
-                                'type:data-access',
-                                'type:util',
-                            ],
-                        },
-                        {
-                            sourceTag: 'type:e2e',
-                            onlyDependOnLibsWithTags: [
-                                'type:feature',
-                                'type:ui',
-                                'type:data-access',
-                                'type:util',
-                            ],
-                        },
-                        {
-                            sourceTag: 'type:dev-app',
-                            onlyDependOnLibsWithTags: [
-                                'type:feature',
-                                'type:ui',
-                                'type:data-access',
-                                'type:util',
-                            ],
-                        },
-                        {
-                            sourceTag: 'type:website',
-                            onlyDependOnLibsWithTags: ['type:ui', 'type:util'],
-                        },
-                        {
-                            sourceTag: 'type:feature',
-                            onlyDependOnLibsWithTags: [
-                                'type:feature',
-                                'type:ui',
-                                'type:data-access',
-                                'type:util',
-                            ],
-                        },
-                        {
-                            sourceTag: 'type:ui',
-                            onlyDependOnLibsWithTags: [
-                                'type:ui',
                                 'type:data-access',
                                 'type:util',
                             ],
@@ -98,52 +57,28 @@ export default [
                             onlyDependOnLibsWithTags: ['type:util'],
                         },
                         {
-                            sourceTag: 'domain:portal-shared',
+                            sourceTag: 'domain:web',
                             onlyDependOnLibsWithTags: [
-                                'domain:portal-shared',
+                                'domain:shared-contracts',
                                 'domain:m3u',
-                                'domain:playback',
+                                'scope:shared',
+                            ],
+                        },
+                        {
+                            sourceTag: 'domain:electron-main',
+                            onlyDependOnLibsWithTags: [
+                                'domain:m3u',
                                 'domain:shared-contracts',
                                 'domain:shared-runtime',
-                                'domain:shared-ui',
                                 'scope:shared',
-                                'scope:portal',
                             ],
                         },
                         {
                             sourceTag: 'domain:m3u',
                             onlyDependOnLibsWithTags: [
                                 'domain:m3u',
-                                'domain:playback',
-                                'domain:portal-shared',
                                 'domain:shared-contracts',
                                 'domain:shared-runtime',
-                                'domain:shared-ui',
-                                'scope:shared',
-                            ],
-                        },
-                        {
-                            sourceTag: 'domain:playlist-import',
-                            onlyDependOnLibsWithTags: [
-                                'domain:m3u',
-                                'domain:playlist-import',
-                                'domain:playback',
-                                'domain:shared-contracts',
-                                'domain:shared-runtime',
-                                'domain:shared-ui',
-                                'domain:stalker',
-                                'scope:shared',
-                            ],
-                        },
-                        {
-                            sourceTag: 'domain:playback',
-                            onlyDependOnLibsWithTags: [
-                                'domain:m3u',
-                                'domain:playback',
-                                'domain:portal-shared',
-                                'domain:shared-contracts',
-                                'domain:shared-runtime',
-                                'domain:shared-ui',
                                 'scope:shared',
                             ],
                         },
@@ -160,59 +95,6 @@ export default [
                                 'domain:m3u',
                                 'domain:shared-contracts',
                                 'domain:shared-runtime',
-                                'scope:shared',
-                            ],
-                        },
-                        {
-                            sourceTag: 'domain:shared-ui',
-                            onlyDependOnLibsWithTags: [
-                                'domain:m3u',
-                                'domain:playback',
-                                'domain:portal-shared',
-                                'domain:shared-contracts',
-                                'domain:shared-runtime',
-                                'domain:shared-ui',
-                                'scope:shared',
-                            ],
-                        },
-                        {
-                            sourceTag: 'domain:xtream',
-                            onlyDependOnLibsWithTags: [
-                                'domain:xtream',
-                                'domain:portal-shared',
-                                'domain:m3u',
-                                'domain:playback',
-                                'domain:shared-contracts',
-                                'domain:shared-runtime',
-                                'domain:shared-ui',
-                                'scope:shared',
-                            ],
-                        },
-                        {
-                            sourceTag: 'domain:stalker',
-                            onlyDependOnLibsWithTags: [
-                                'domain:stalker',
-                                'domain:portal-shared',
-                                'domain:m3u',
-                                'domain:playback',
-                                'domain:shared-contracts',
-                                'domain:shared-runtime',
-                                'domain:shared-ui',
-                                'scope:shared',
-                            ],
-                        },
-                        {
-                            sourceTag: 'domain:workspace',
-                            onlyDependOnLibsWithTags: [
-                                'domain:workspace',
-                                'domain:portal-shared',
-                                'domain:xtream',
-                                'domain:stalker',
-                                'domain:m3u',
-                                'domain:playback',
-                                'domain:shared-contracts',
-                                'domain:shared-runtime',
-                                'domain:shared-ui',
                                 'scope:shared',
                             ],
                         },
@@ -237,25 +119,6 @@ export default [
         },
     },
     {
-        files: [
-            '**/*.ts',
-            '**/*.tsx',
-            '**/*.cts',
-            '**/*.mts',
-            '**/*.js',
-            '**/*.jsx',
-            '**/*.cjs',
-            '**/*.mjs',
-        ],
-        // Override or add rules here
-        rules: {
-            '@angular-eslint/template/click-events-have-key-events': 'off',
-            '@angular-eslint/template/interactive-supports-focus': 'off',
-        },
-    },
-    {
-        // AGENTS.md file-size rule for production code: target under 300 lines,
-        // hard maximum 400. Files that predate the rule are baselined below.
         files: ['**/*.ts', '**/*.tsx'],
         ignores: TEST_FILE_GLOBS,
         rules: {
@@ -266,8 +129,6 @@ export default [
         },
     },
     {
-        // Tests get a much higher ceiling — see tools/eslint/max-lines-config.mjs
-        // for why a long spec is not the same signal as a long component.
         files: TEST_FILE_GLOBS,
         rules: {
             'max-lines': [
@@ -283,12 +144,7 @@ export default [
         },
     },
     {
-        files: [
-            'apps/web/src/app/app.component.ts',
-            'apps/electron-backend/src/app/events/player.events.ts',
-            'libs/epg/data-access/**/*.ts',
-            'libs/ui/playback/**/*.ts',
-        ],
+        files: ['apps/electron-backend/src/app/events/player.events.ts'],
         rules: {
             'no-console': ['warn', { allow: ['debug', 'warn', 'error'] }],
         },

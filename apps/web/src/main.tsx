@@ -1,4 +1,7 @@
-// Point d'entrée React TVNest avec fournisseur de thème Noir Absolu OLED par défaut.
+// Point d'entrée React TVNest avec polices embarquées localement et thème initialisé hors-ligne.
+import './lib/theme-boot';
+import '@fontsource-variable/bricolage-grotesque';
+import '@fontsource-variable/plus-jakarta-sans';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from '@/lib/theme';

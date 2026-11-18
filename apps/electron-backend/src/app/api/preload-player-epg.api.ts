@@ -10,6 +10,7 @@ import type {
     EmbeddedMpvSession,
     EmbeddedMpvSubtitleStyle,
     EmbeddedMpvSupport,
+    ExternalPlayerName,
     ExternalPlayerSession,
     PlayerContentInfo,
     Playlist,
@@ -76,8 +77,8 @@ export type PreloadPlayerEpgSlice = Pick<
     | 'searchEpgChannels'
     | 'setMpvPlayerPath'
     | 'setVlcPlayerPath'
+    | 'selectExternalPlayerExecutable'
     | 'updateSettings'
-    | 'getAiSettings'
     | 'cancelSourceProbe'
     | 'probeM3uSource'
     | 'stalkerRequest'
@@ -204,9 +205,10 @@ export const preloadPlayerEpgApi: PreloadPlayerEpgSlice = {
         ipcRenderer.invoke('SET_MPV_PLAYER_PATH', mpvPlayerPath),
     setVlcPlayerPath: (vlcPlayerPath: string) =>
         ipcRenderer.invoke('SET_VLC_PLAYER_PATH', vlcPlayerPath),
+    selectExternalPlayerExecutable: (player: ExternalPlayerName) =>
+        ipcRenderer.invoke('SELECT_EXTERNAL_PLAYER_EXECUTABLE', player),
     updateSettings: (settings: Partial<Settings>) =>
         ipcRenderer.invoke('SETTINGS_UPDATE', settings),
-    getAiSettings: () => ipcRenderer.invoke('GET_AI_SETTINGS'),
     cancelSourceProbe: (id: string) => ipcRenderer.invoke('SOURCE_HEALTH_CANCEL', id),
     probeM3uSource: (payload: unknown) => ipcRenderer.invoke('M3U_SOURCE_PROBE', payload),
     stalkerRequest: (payload: {

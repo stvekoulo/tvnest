@@ -956,19 +956,17 @@ describe('extractPublicSection', () => {
 });
 
 describe('extract-changelog-section CLI contracts', () => {
-    it('uses public extraction for authored tag-release text', () => {
+    it('verifies tag version and draft-first release flow in build-windows.yml', () => {
         const workflow = readFileSync(
             new URL(
-                '../../.github/workflows/build-and-make.yaml',
+                '../../.github/workflows/build-windows.yml',
                 import.meta.url
             ),
             'utf8'
         );
 
-        assert.match(
-            workflow,
-            /extract-changelog-section\.mjs --public "\$\{VERSION\}"/
-        );
+        assert.match(workflow, /refs\/tags\/v/);
+        assert.match(workflow, /gh release create .*--draft --verify-tag/);
     });
 
     it('parses the public flag', () => {

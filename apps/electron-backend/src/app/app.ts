@@ -267,14 +267,13 @@ export default class App {
     }
 
     public static isDevelopmentMode() {
-        // First check ELECTRON_IS_DEV environment variable (used by E2E tests)
-        // This allows E2E tests to run in production mode without packaging
+        if (app.isPackaged) {
+            return false;
+        }
         if ('ELECTRON_IS_DEV' in process.env) {
             return parseInt(process.env.ELECTRON_IS_DEV, 10) === 1;
         }
-        // Fall back to Electron's built-in app.isPackaged
-        // This is the most reliable way to detect if the app is packaged
-        return !app.isPackaged;
+        return true;
     }
 
     private static onWindowAllClosed() {

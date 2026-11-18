@@ -13,25 +13,17 @@
             "!{projectRoot}/test-setup.[jt]s"
         ],
         "sharedGlobals": [
-            "{workspaceRoot}/.github/workflows/ci.yml",
+            "{workspaceRoot}/.github/workflows/build-windows.yml",
             "{workspaceRoot}/package.json"
         ]
     },
     "targetDefaults": {
-        "@angular/build:application": {
-            "cache": true,
-            "dependsOn": ["^build"],
-            "inputs": ["production", "^production"]
-        },
         "@nx/eslint:lint": {
             "cache": true,
             "inputs": [
                 "default",
                 "^default",
-                "{workspaceRoot}/.eslintrc.json",
-                "{workspaceRoot}/.eslintignore",
                 "{workspaceRoot}/eslint.config.mjs",
-                "{workspaceRoot}/tools/eslint-rules/**/*",
                 "{workspaceRoot}/tools/eslint/**/*"
             ]
         },
@@ -39,10 +31,7 @@
             "cache": true,
             "inputs": [
                 "default",
-                "{workspaceRoot}/.eslintrc.json",
-                "{workspaceRoot}/.eslintignore",
                 "{workspaceRoot}/eslint.config.mjs",
-                "{workspaceRoot}/tools/eslint-rules/**/*",
                 "{workspaceRoot}/tools/eslint/**/*"
             ]
         },
@@ -67,31 +56,9 @@
             "cache": true,
             "dependsOn": ["^build"],
             "inputs": ["production", "^production"]
-        },
-        "e2e-ci--src/*.e2e.ts": [
-            {
-                "filter": { "projects": ["electron-backend-e2e"] },
-                "dependsOn": [
-                    {
-                        "projects": ["electron-backend"],
-                        "target": "build-e2e"
-                    }
-                ]
-            },
-            {
-                "filter": { "projects": ["web-e2e"] },
-                "dependsOn": []
-            }
-        ]
+        }
     },
     "plugins": [
-        {
-            "plugin": "@nx/playwright/plugin",
-            "options": {
-                "targetName": "e2e",
-                "waitForWebServer": false
-            }
-        },
         {
             "plugin": "@nx/eslint/plugin",
             "options": {
@@ -99,21 +66,6 @@
             }
         }
     ],
-    "generators": {
-        "@nx/angular:application": {
-            "e2eTestRunner": "playwright",
-            "linter": "eslint",
-            "style": "scss",
-            "unitTestRunner": "jest"
-        },
-        "@nx/angular:library": {
-            "linter": "eslint",
-            "unitTestRunner": "jest"
-        },
-        "@nx/angular:component": {
-            "style": "scss"
-        }
-    },
     "defaultProject": "web",
     "analytics": false
 }

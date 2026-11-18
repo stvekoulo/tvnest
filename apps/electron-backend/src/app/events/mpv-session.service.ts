@@ -1,9 +1,15 @@
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
+import { redactSensitiveData } from '@iptvnator/shared/logging';
 import {
     ExternalPlayerSession,
     PlayerContentInfo,
     readExternalPlayerErrorCode,
 } from '@iptvnator/shared/interfaces';
+import {
+    assertSafePlaybackUrl,
+    sanitizePlayerTextValue,
+} from '../util/playback-url-guard';
 import {
     MPV_PLAYER_ARGUMENTS,
     MPV_PLAYER_PATH,
@@ -159,6 +165,8 @@ async function launchMpvPlayer(
     let freshTeardownUnconfirmed = false;
 
     try {
+        const safeUrl = assertSafePlaybackUrl(url);
+        const safeTitle = sanitizePlayerTextValue(title) ?? '';
         const isFlatpak = isRunningInFlatpak();
         const mpvLaunchContext = resolveExternalPlayerLaunchContext(
             'mpv',
@@ -178,7 +186,7 @@ async function launchMpvPlayer(
             effectiveUserAgent,
             headerFields,
         } = resolveEffectiveExternalPlaybackRequest({
-            url,
+            url: safeUrl,
             userAgent,
             referer,
             origin,
@@ -190,7 +198,7 @@ async function launchMpvPlayer(
             launchMode: mpvLaunchContext.mode,
             requestedReuseInstance,
             reuseInstance,
-            stream: maskUrlForLogs(url),
+            stream: maskUrlForLogs(safeUrl),
             hasUserAgent: Boolean(effectiveUserAgent),
             hasReferer: Boolean(effectiveReferer),
             hasOrigin: Boolean(effectiveOrigin),
@@ -205,8 +213,8 @@ async function launchMpvPlayer(
             const reused = await reusableMpvProcess.tryReuse({
                 session,
                 previousProcessSessionId,
-                url,
-                title,
+                url: safeUrl,
+                title: safeTitle,
                 effectiveUserAgent,
                 effectiveReferer,
                 headerFields,
@@ -225,11 +233,15 @@ async function launchMpvPlayer(
         const args: string[] = [];
 
         if (useMpvSocketBridge) {
+            const socketId = randomUUID();
             socketPath =
                 process.platform === 'win32'
-                    ? `\\\\.\\pipe\\mpv-${Date.now()}`
-                    : `/tmp/mpvsocket-${Date.now()}`;
-            args.push(`--input-ipc-server=${socketPath}`, '--idle=yes');
+                    ? `\\\\.\\pipe\\mpv-${socketId}`
+                    : `/tmp/mpvsocket-${socketId}`;
+            args.push(`--input-ipc-server=${socketPath}`);
+            if (reuseInstance) {
+                args.push('--idle=yes');
+            }
         }
 
         args.push('--ytdl=no');
@@ -248,15 +260,15 @@ async function launchMpvPlayer(
             );
         }
 
-        if (title) {
-            args.push(`--force-media-title=${title}`);
+        if (safeTitle) {
+            args.push(`--force-media-title=${safeTitle}`);
         }
 
         if (startTime) {
             args.push(`--start=${startTime}`);
         }
 
-        args.push(url);
+        args.push(safeUrl);
 
         await new Promise<void>((resolve, reject) => {
             let settled = false;
@@ -394,7 +406,10 @@ async function launchMpvPlayer(
 
         return externalPlayerSessions.markOpened(session.id) ?? session;
     } catch (error) {
-        console.error('Error opening MPV player:', error);
+        console.error(
+            'Error opening MPV player:',
+            redactSensitiveData(error)
+        );
         if (!reuseState.teardownUnconfirmed && !freshTeardownUnconfirmed) {
             stopPositionPolling();
         }

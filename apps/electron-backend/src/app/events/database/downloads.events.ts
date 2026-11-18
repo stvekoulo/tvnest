@@ -3,6 +3,7 @@ import {
     removeDownloadRequest,
 } from './download-removal-requests';
 import type { DownloadMetadataSnapshot } from '@iptvnator/shared/interfaces';
+import { redactSensitiveData } from '@iptvnator/shared/logging';
 import { eq } from 'drizzle-orm';
 import { app, dialog, ipcMain, shell } from 'electron';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -97,7 +98,10 @@ ipcMain.handle(
                 downloadDirectoryAuthorizer
             );
         } catch (error) {
-            console.error('[Downloads] Error enqueuing download:', error);
+            console.error(
+                '[Downloads] Error enqueuing download:',
+                redactSensitiveData(error)
+            );
             throw error;
         }
     }

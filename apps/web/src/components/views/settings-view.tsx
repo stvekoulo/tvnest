@@ -1,5 +1,5 @@
 // Paramètres système TVNest : Thème OLED, Langues par défaut, libmpv intégré, Réseau et SQLite.
-import { Database, Globe, Maximize2, Minimize2, Moon, Save, Smartphone, Sun, Trash2 } from 'lucide-react';
+import { Database, Globe, Maximize2, Minimize2, Moon, Save, Sun, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button, StatefulButton, type ButtonState } from '@/components/motion/button';
 import {
@@ -47,13 +47,17 @@ export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: Sett
   const [userAgent, setUserAgent] = useState(prefs.userAgent);
   const [saveState, setSaveState] = useState<ButtonState>('idle');
   const [appVersion, setAppVersion] = useState('1.0.0');
-  const [localIps, setLocalIps] = useState<string[]>([]);
   const [tmdbCount, setTmdbCount] = useState<number>(0);
+
+  useEffect(() => {
+    setMpvPath(prefs.mpvPlayerPath);
+    setVlcPath(prefs.vlcPlayerPath);
+    setUserAgent(prefs.userAgent);
+  }, [prefs.mpvPlayerPath, prefs.vlcPlayerPath, prefs.userAgent]);
 
   useEffect(() => {
     if (!isElectronRuntime()) return;
     window.electron.getAppVersion().then(setAppVersion).catch(() => {});
-    window.electron.getLocalIpAddresses().then(setLocalIps).catch(() => {});
     window.electron
       .dbGetTmdbCacheStats()
       .then((s) => setTmdbCount((s as { count?: number })?.count || 0))
@@ -215,27 +219,68 @@ export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: Sett
           onUpdatePrefs={onUpdatePrefs}
         />
 
-        <div className="space-y-4">
-          <section className="space-y-3 rounded-[26px] border border-border bg-card p-6">
-            <p className="text-sm font-bold text-foreground">Affichage</p>
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-elevated px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-foreground">Démarrer en plein écran</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Ouvre TVNest en plein écran à chaque lancement (F11 pour en sortir).
+        <div className="space-y-4 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <section className="space-y-3 rounded-[26px] border border-border bg-card p-6">
+              <p className="text-sm font-bold text-foreground">Affichage</p>
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-elevated px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">Démarrer en plein écran</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Ouvre TVNest en plein écran à chaque lancement (F11 pour en sortir).
+                  </p>
+                </div>
+                <Switch
+                  checked={prefs.startupFullscreen}
+                  onCheckedChange={(v) => onUpdatePrefs({ startupFullscreen: v })}
+                  ariaLabel="Démarrer en plein écran"
+                />
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => void toggleAppFullscreen()}>
+                {appFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                {appFullscreen ? 'Quitter le plein écran' : 'Passer en plein écran maintenant'}
+              </Button>
+            </section>
+
+            <section className="space-y-3 rounded-[26px] border border-border bg-card p-6">
+              <div>
+                <p className="text-sm font-bold text-foreground">Actualisation des sources</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Au démarrage, actualise en arrière-plan vos playlists M3U, portails Xtream et Stalker.
                 </p>
               </div>
-              <Switch
-                checked={prefs.startupFullscreen}
-                onCheckedChange={(v) => onUpdatePrefs({ startupFullscreen: v })}
-                ariaLabel="Démarrer en plein écran"
-              />
-            </div>
-            <Button size="sm" variant="secondary" onClick={() => void toggleAppFullscreen()}>
-              {appFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              {appFullscreen ? 'Quitter le plein écran' : 'Passer en plein écran maintenant'}
-            </Button>
-          </section>
+              <Select
+                value={String(prefs.sourceRefreshDays)}
+                onValueChange={(v) => onUpdatePrefs({ sourceRefreshDays: Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCE_REFRESH_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </section>
+
+            <section className="flex flex-col justify-between gap-3 rounded-[26px] border border-border bg-card p-6">
+              <div className="flex items-center gap-3">
+                <Database className="size-5 text-primary" />
+                <div>
+                  <p className="text-sm font-bold text-foreground">Cache des fiches TMDB</p>
+                  <p className="text-xs text-muted-foreground">
+                    {tmdbCount} fiche(s) mise(s) en cache localement
+                  </p>
+                </div>
+              </div>
+              <Button size="sm" variant="secondary" onClick={handleClearTmdb}>
+                <Trash2 className="size-3.5" /> Purger le cache
+              </Button>
+            </section>
+          </div>
 
           <SettingsUpdateCard
             update={appUpdate}
@@ -245,60 +290,6 @@ export function SettingsView({ appUpdate, prefs, onUpdatePrefs, onNotify }: Sett
               if (v) void appUpdate.check();
             }}
           />
-
-          <section className="space-y-3 rounded-[26px] border border-border bg-card p-6">
-            <div>
-              <p className="text-sm font-bold text-foreground">Actualisation des sources</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Au démarrage, re-télécharge en arrière-plan les playlists M3U et portails Xtream
-                dont la dernière actualisation est plus ancienne que l’intervalle choisi.
-              </p>
-            </div>
-            <Select
-              value={String(prefs.sourceRefreshDays)}
-              onValueChange={(v) => onUpdatePrefs({ sourceRefreshDays: Number(v) })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SOURCE_REFRESH_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </section>
-
-          <section className="flex items-center justify-between rounded-[26px] border border-border bg-card p-6">
-            <div className="flex items-center gap-3">
-              <Database className="size-5 text-primary" />
-              <div>
-                <p className="text-sm font-bold text-foreground">Cache des fiches TMDB</p>
-                <p className="text-xs text-muted-foreground">
-                  {tmdbCount} fiche(s) mise(s) en cache localement
-                </p>
-              </div>
-            </div>
-            <Button size="sm" variant="secondary" onClick={handleClearTmdb}>
-              <Trash2 className="size-3.5" /> Purger
-            </Button>
-          </section>
-
-          <section className="flex items-center justify-between rounded-[26px] border border-border bg-card p-6">
-            <div className="flex items-center gap-3">
-              <Smartphone className="size-5 text-foreground" />
-              <div>
-                <p className="text-sm font-bold text-foreground">Télécommande Web LAN</p>
-                <p className="text-xs text-muted-foreground">
-                  {localIps.length > 0
-                    ? `IP locales : ${localIps.join(', ')}`
-                    : 'Disponible sur le réseau local'}
-                </p>
-              </div>
-            </div>
-          </section>
         </div>
       </div>
     </div>

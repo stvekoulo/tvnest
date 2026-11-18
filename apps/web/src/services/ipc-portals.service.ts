@@ -7,7 +7,8 @@ import {
 import { checkXtreamAccount, requestXtream } from '@/services/xtream-request.service';
 import type { UnifiedPlaylist } from '@/types/iptv.types';
 
-// Connecte un portail Xtream Codes et synchronise ses catégories et flux dans SQLite.
+export { addStalkerPortal, refreshStalkerPortal } from './ipc-stalker.service';
+
 export async function addXtreamPortal(params: {
   title: string;
   serverUrl: string;
@@ -19,19 +20,17 @@ export async function addXtreamPortal(params: {
   }
 
   const id = crypto.randomUUID();
-  // Même adresse qu'IPTVnator : `http://hote:80/player_api.php` → `http://hote`.
   let cleanServer: string;
   try {
     cleanServer = normalizeXtreamServerUrl(params.serverUrl);
   } catch {
-    throw new Error("Adresse du serveur invalide : saisissez-la sous la forme http://serveur:port.");
+    throw new Error('Adresse du serveur invalide : saisissez-la sous la forme http://serveur:port.');
   }
   const creds = {
     username: params.username.trim(),
     password: params.password.trim(),
   };
 
-  // Vérification réelle du compte (identifiants, abonnement) avant de créer la source.
   await checkXtreamAccount(cleanServer, creds);
 
   await window.electron.dbCreatePlaylist({
@@ -83,16 +82,13 @@ const XTREAM_SECTIONS = [
   },
 ] as const;
 
-// Synchronise Live, Films VOD et Séries d'un portail Xtream dans SQLite.
 export async function syncXtreamPortalToDb(
   playlistId: string,
   serverUrl: string,
   creds: { username: string; password: string }
 ): Promise<number> {
-  const sections = XTREAM_SECTIONS;
-
   let total = 0;
-  for (const sec of sections) {
+  for (const sec of XTREAM_SECTIONS) {
     const [catRes, streamRes] = await Promise.all([
       window.electron.xtreamRequest({
         url: serverUrl,
@@ -118,108 +114,58 @@ export async function syncXtreamPortalToDb(
         sec.dbStreamType
       );
       total += saved.count || streamRes.payload.length;
+      await window.electron.dbSetAppState?.(
+        `xtream-import-status:${playlistId}:${sec.dbStreamType}`,
+        'completed'
+      );
     }
   }
   return total;
 }
 
-// Réimporte le catalogue d'un portail Xtream existant en conservant favoris, historique et
-// groupes masqués. `saveContent` ignore une source déjà remplie : il faut vider puis réimporter.
 export async function refreshXtreamPortal(playlist: UnifiedPlaylist): Promise<number> {
   if (!isElectronRuntime() || !playlist.serverUrl) return 0;
   const creds = { username: playlist.username || '', password: playlist.password || '' };
   const request = (action: string) => requestXtream(playlist.serverUrl as string, { ...creds, action });
 
-  // 1. Tout télécharger d'abord : en cas d'échec réseau, le catalogue actuel reste intact.
   const fetched = await Promise.all(
     XTREAM_SECTIONS.map(async (sec) => {
-      const [categories, streams] = await Promise.all([request(sec.catAction), request(sec.streamAction)]);
+      const [categories, streams, existingCats] = await Promise.all([
+        request(sec.catAction),
+        request(sec.streamAction),
+        window.electron.dbGetAllCategories
+          ? window.electron.dbGetAllCategories(playlist.id, sec.dbCatType).catch(() => [])
+          : Promise.resolve([]),
+      ]);
       if (!Array.isArray(categories) || !Array.isArray(streams)) {
         throw new Error(`Réponse incomplète du serveur IPTV (${sec.dbStreamType}).`);
       }
-      return { sec, categories, streams };
+      const locked = existingCats
+        .filter((c) => Boolean(c.locked))
+        .map((c) => c.xtream_id);
+      return { sec, categories, streams, locked };
     })
   );
 
-  // 2. Vider l'ancien contenu en récupérant les données de l'utilisateur, puis réimporter.
   const backup = await window.electron.dbDeleteXtreamContent(playlist.id);
   if (!backup.success) throw new Error('Impossible de remplacer le catalogue Xtream');
   let total = 0;
-  for (const { sec, categories, streams } of fetched) {
+  for (const { sec, categories, streams, locked } of fetched) {
     const hidden = backup.hiddenCategories
       .filter((h) => h.categoryType === sec.dbCatType)
       .map((h) => h.xtreamId);
-    await window.electron.dbSaveCategories(playlist.id, categories, sec.dbCatType, hidden);
+    await window.electron.dbSaveCategories(playlist.id, categories, sec.dbCatType, hidden, locked);
     const saved = await window.electron.dbSaveContent(playlist.id, streams, sec.dbStreamType);
     total += saved.count || streams.length;
+    await window.electron.dbSetAppState?.(
+      `xtream-import-status:${playlist.id}:${sec.dbStreamType}`,
+      'completed'
+    );
   }
-  // 3. Rattacher favoris et historique au nouveau contenu.
   await window.electron.dbRestoreXtreamUserData(playlist.id, backup.favorites, backup.recentlyViewed);
+  await window.electron.dbUpdatePlaylist?.(playlist.id, {
+    count: total,
+    updateDate: Date.now(),
+  });
   return total;
-}
-
-// Connecte un portail Stalker (MAC Address) via IPC Electron.
-export async function addStalkerPortal(params: {
-  title: string;
-  portalUrl: string;
-  macAddress: string;
-}): Promise<UnifiedPlaylist> {
-  if (!isElectronRuntime()) {
-    throw new Error('La connexion Stalker Portal requiert le moteur Electron');
-  }
-  const id = crypto.randomUUID();
-  const cleanUrl = params.portalUrl.trim();
-  const mac = params.macAddress.trim().toUpperCase();
-
-  const hs = await window.electron.stalkerRequest({
-    url: cleanUrl,
-    macAddress: mac,
-    params: { type: 'stb', action: 'handshake' },
-  });
-  const token = (hs as { js?: { token?: string } })?.js?.token;
-
-  const chRes = await window.electron.stalkerRequest({
-    url: cleanUrl,
-    macAddress: mac,
-    token,
-    params: { type: 'itv', action: 'get_all_channels' },
-  });
-  const rawList =
-    (chRes as { js?: { data?: Array<Record<string, unknown>> } })?.js?.data ||
-    [];
-
-  const now = new Date().toISOString();
-  const playlistObj: Playlist = {
-    _id: id,
-    title: params.title.trim() || cleanUrl,
-    portalUrl: cleanUrl,
-    macAddress: mac,
-    count: rawList.length,
-    importDate: now,
-    lastUsage: now,
-    autoRefresh: false,
-    playlist: {
-      header: { attrs: {}, raw: '#EXTM3U' },
-      items: rawList.map((ch, idx) => ({
-        name: String(ch.name || `Channel ${idx + 1}`),
-        url: String(ch.cmd || '').replace(/^ffmpeg\s+/i, ''),
-        tvg: {
-          id: String(ch.xmltv_id || ''),
-          name: String(ch.name || ''),
-          logo: String(ch.logo || ''),
-          url: '',
-          rec: '',
-        },
-        group: { title: 'Stalker TV' },
-        http: { referrer: '', 'user-agent': '' },
-        line: idx + 1,
-        raw: '',
-        timeshift: '',
-        catchup: { type: '', days: '', source: '' },
-      })),
-    },
-  };
-
-  await window.electron.dbUpsertAppPlaylist(playlistObj);
-  return mapPlaylistToUnified(playlistObj);
 }

@@ -15,7 +15,7 @@ export function isElectronRuntime(): boolean {
 
 function inferPortalKind(p: Partial<Playlist>): PortalKind {
   if (p.serverUrl) return 'xtream';
-  if (p.macAddress) return 'stalker';
+  if (p.macAddress || p.portalUrl) return 'stalker';
   if (p.filePath) return 'm3u-file';
   if (p.url) return 'm3u-url';
   return 'm3u-text';
@@ -28,17 +28,27 @@ export function mapPlaylistToUnified(
   const fallbackCount = p.count || p.playlist?.items?.length || 0;
   const totalCount =
     sqlCounts && sqlCounts.total > 0 ? sqlCounts.total : fallbackCount;
+  const epgUrl =
+    Array.isArray(p.epgUrls) && p.epgUrls.length > 0
+      ? p.epgUrls[0]
+      : Array.isArray(p.detectedEpgUrls) && p.detectedEpgUrls.length > 0
+        ? p.detectedEpgUrls[0]
+        : undefined;
 
   return {
     id: p._id,
     title: p.title || p.filename || 'Playlist sans nom',
     kind: inferPortalKind(p),
-    url: p.url,
+    url: p.url || p.portalUrl,
+    portalUrl: p.portalUrl || (p.macAddress ? p.url : undefined),
     filePath: p.filePath,
     serverUrl: p.serverUrl,
     username: p.username,
     password: p.password,
     macAddress: p.macAddress,
+    serialNumber: p.stalkerSerialNumber,
+    token: p.stalkerToken,
+    epgUrl,
     userAgent: p.userAgent,
     channelCount: totalCount,
     counts: sqlCounts,
@@ -51,16 +61,24 @@ export function mapPlaylistToUnified(
   };
 }
 
+async function readPlaylistMetas(): Promise<Playlist[]> {
+  if (!isElectronRuntime()) return [];
+  if (window.electron.dbGetAppPlaylistMetas) {
+    return (await window.electron.dbGetAppPlaylistMetas()) || [];
+  }
+  return (await window.electron.dbGetAppPlaylists()) || [];
+}
+
 // Charge les playlists avec leurs vrais compteurs SQLite (Live + Films + Séries).
 export async function fetchSavedPlaylists(): Promise<UnifiedPlaylist[]> {
   if (isElectronRuntime()) {
     const [metas, countsByPlaylist] = await Promise.all([
-      window.electron.dbGetAppPlaylists(),
+      readPlaylistMetas(),
       window.electron.dbGetPlaylistStreamCounts
         ? window.electron.dbGetPlaylistStreamCounts().catch(() => ({}))
         : Promise.resolve({}),
     ]);
-    return (metas || []).map((meta) =>
+    return metas.map((meta) =>
       mapPlaylistToUnified(meta, countsByPlaylist[meta._id])
     );
   }
@@ -113,6 +131,25 @@ export async function addM3uPlaylistFromFileDialog(): Promise<UnifiedPlaylist | 
   if (!opened) return null;
   await window.electron.dbUpsertAppPlaylist(opened);
   return mapPlaylistToUnified(opened);
+}
+
+// Importe un fichier .m3u/.m3u8 transmis par l'OS (double-clic ou argument CLI).
+export async function importM3uPlaylistFromFilePath(
+  filePath: string,
+  fileName?: string
+): Promise<UnifiedPlaylist> {
+  if (!isElectronRuntime()) {
+    throw new Error('Ouvrez TVNest Desktop pour accéder aux fichiers locaux');
+  }
+  const cleanTitle = (fileName || filePath.split(/[\\/]/).pop() || 'Playlist M3U')
+    .replace(/\.(m3u8?|pls)$/i, '')
+    .trim();
+  const loaded = await window.electron.updatePlaylistFromFilePath(
+    filePath,
+    cleanTitle || 'Playlist M3U'
+  );
+  await window.electron.dbUpsertAppPlaylist(loaded);
+  return mapPlaylistToUnified(loaded);
 }
 
 export async function addM3uPlaylistFromText(
@@ -175,10 +212,12 @@ export function markSourcesRefreshed(ids: string[], at = Date.now()): void {
 export async function fetchSourceRefreshTimes(): Promise<Record<string, number>> {
   if (!isElectronRuntime()) return {};
   const log = readSourceRefreshLog();
-  const metas: Playlist[] = (await window.electron.dbGetAppPlaylists()) || [];
+  const metas = await readPlaylistMetas();
   const out: Record<string, number> = {};
   for (const p of metas) {
-    const fromMeta = Date.parse(String(p.updateDate ?? p.importDate ?? ''));
+    const rawDate = p.updateDate ?? p.importDate;
+    const fromMeta =
+      typeof rawDate === 'number' ? rawDate : Date.parse(String(rawDate ?? ''));
     out[p._id] = log[p._id] ?? (Number.isFinite(fromMeta) ? fromMeta : 0);
   }
   return out;
@@ -187,8 +226,14 @@ export async function fetchSourceRefreshTimes(): Promise<Record<string, number>>
 // Re-télécharge des playlists M3U (URL ou fichier) depuis leur source ; renvoie les ids réussis.
 export async function refreshM3uPlaylists(ids: string[]): Promise<string[]> {
   if (!isElectronRuntime() || ids.length === 0) return [];
-  const metas: Playlist[] = (await window.electron.dbGetAppPlaylists()) || [];
-  const targets = metas.filter((p) => ids.includes(p._id) && (p.url || p.filePath));
+  const fullRows = window.electron.dbGetAppPlaylist
+    ? await Promise.all(ids.map((id) => window.electron.dbGetAppPlaylist(id)))
+    : ((await window.electron.dbGetAppPlaylists()) || []).filter((p) =>
+        ids.includes(p._id)
+      );
+  const targets = fullRows.filter(
+    (p): p is Playlist => Boolean(p && !p.macAddress && !p.portalUrl && (p.url || p.filePath))
+  );
   if (targets.length === 0) return [];
   const res = await window.electron.autoUpdatePlaylists(targets);
   for (const p of res.playlists) await window.electron.dbUpsertAppPlaylist(p);

@@ -74,12 +74,6 @@ jest.mock('./parental-lock.events', () => ({
         mockApplyParentalLockState(...args),
 }));
 
-jest.mock('../server/http-server', () => ({
-    httpServer: {
-        updateSettings: mockUpdateSettings,
-    },
-}));
-
 describe('SETTINGS_UPDATE', () => {
     let consoleLogSpy: jest.SpiedFunction<typeof console.log>;
     let settingsUpdateHandler: SettingsUpdateHandler;
@@ -287,49 +281,6 @@ describe('SETTINGS_UPDATE', () => {
             [STORE_KEYS.APP_UPDATE_CHANNEL, 'stable'],
         ]);
         expect(listener).not.toHaveBeenCalled();
-    });
-
-    it('reconciles an enabled remote-control update with the stored port', () => {
-        mockStoreGet.mockImplementation(
-            (key: string, fallbackValue: unknown): unknown =>
-                key === 'remoteControlPort' ? 9988 : fallbackValue
-        );
-
-        settingsUpdateHandler({}, { remoteControl: true });
-
-        expect(mockStoreGet.mock.calls).toEqual([['remoteControlPort', 8765]]);
-        expect(mockStoreSet.mock.calls).toEqual([['remoteControl', true]]);
-        expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
-        expect(mockUpdateSettings).toHaveBeenCalledWith(true, 9988);
-    });
-
-    it('reconciles a remote-control port update with the stored enabled state', () => {
-        mockStoreGet.mockImplementation(
-            (key: string, fallbackValue: unknown): unknown =>
-                key === 'remoteControl' ? true : fallbackValue
-        );
-
-        settingsUpdateHandler({}, { remoteControlPort: 9123 });
-
-        expect(mockStoreGet.mock.calls).toEqual([['remoteControl', false]]);
-        expect(mockStoreSet.mock.calls).toEqual([['remoteControlPort', 9123]]);
-        expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
-        expect(mockUpdateSettings).toHaveBeenCalledWith(true, 9123);
-    });
-
-    it('preserves explicit false and zero remote-control values', () => {
-        settingsUpdateHandler(
-            {},
-            { remoteControl: false, remoteControlPort: 0 }
-        );
-
-        expect(mockStoreGet).not.toHaveBeenCalled();
-        expect(mockStoreSet.mock.calls).toEqual([
-            ['remoteControl', false],
-            ['remoteControlPort', 0],
-        ]);
-        expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
-        expect(mockUpdateSettings).toHaveBeenCalledWith(false, 0);
     });
 
     it('does not print a TMDB apiKey while retaining useful fields', () => {

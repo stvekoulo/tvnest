@@ -7,9 +7,11 @@ import {
   Layers,
   Plus,
   Radio,
+  RefreshCw,
   Server,
   Trash2,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/motion/button/base';
 import { TvNestLogo } from '@/components/shell/tvnest-logo';
 import { type AccountState, useXtreamAccounts } from '@/hooks/use-xtream-accounts';
@@ -17,7 +19,6 @@ import { cn } from '@/lib/utils';
 import { describeExpiry } from '@/services/xtream-request.service';
 import type { PortalKind, UnifiedPlaylist } from '@/types/iptv.types';
 
-// Abonnement Xtream : jours restants, date de fin, connexions utilisées.
 function SourceSubscription({ state }: { state: AccountState | undefined }) {
   if (state === undefined || state === 'loading') {
     return <p className="mt-3 text-[11px] text-muted-foreground">Vérification de l'abonnement…</p>;
@@ -65,6 +66,7 @@ interface PlaylistsManagerViewProps {
   playlists: UnifiedPlaylist[];
   activePlaylistId: string | null;
   onSelectPlaylist: (id: string) => void;
+  onRefreshPlaylist: (pl: UnifiedPlaylist) => Promise<void>;
   onDeletePlaylist: (id: string) => void;
   onOpenAddSource: () => void;
 }
@@ -73,41 +75,34 @@ const KIND_META: Record<
   PortalKind,
   { label: string; badgeClass: string; icon: typeof Globe }
 > = {
-  'm3u-url': {
-    label: 'M3U URL',
-    badgeClass: 'border-primary/35 bg-primary/15 text-primary',
-    icon: Globe,
-  },
-  'm3u-file': {
-    label: 'Fichier M3U',
-    badgeClass: 'border-border bg-elevated text-foreground',
-    icon: FolderOpen,
-  },
-  'm3u-text': {
-    label: 'M3U Texte',
-    badgeClass: 'border-border bg-elevated text-foreground',
-    icon: Layers,
-  },
-  xtream: {
-    label: 'Xtream Codes',
-    badgeClass: 'border-border bg-elevated text-foreground',
-    icon: Server,
-  },
-  stalker: {
-    label: 'Stalker MAC',
-    badgeClass: 'border-border bg-elevated text-foreground',
-    icon: Radio,
-  },
+  'm3u-url': { label: 'M3U URL', badgeClass: 'border-primary/35 bg-primary/15 text-primary', icon: Globe },
+  'm3u-file': { label: 'Fichier M3U', badgeClass: 'border-border bg-elevated text-foreground', icon: FolderOpen },
+  'm3u-text': { label: 'M3U Texte', badgeClass: 'border-border bg-elevated text-foreground', icon: Layers },
+  xtream: { label: 'Xtream Codes', badgeClass: 'border-border bg-elevated text-foreground', icon: Server },
+  stalker: { label: 'Stalker MAC', badgeClass: 'border-border bg-elevated text-foreground', icon: Radio },
 };
 
 export function PlaylistsManagerView({
   playlists,
   activePlaylistId,
   onSelectPlaylist,
+  onRefreshPlaylist,
   onDeletePlaylist,
   onOpenAddSource,
 }: PlaylistsManagerViewProps) {
   const accounts = useXtreamAccounts(playlists);
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleRefresh = async (pl: UnifiedPlaylist) => {
+    setRefreshingId(pl.id);
+    try {
+      await onRefreshPlaylist(pl);
+    } finally {
+      setRefreshingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-border bg-card p-6">
@@ -154,6 +149,9 @@ export function PlaylistsManagerView({
             const meta = KIND_META[pl.kind];
             const Icon = meta.icon;
             const isActive = pl.id === activePlaylistId;
+            const canRefresh = pl.kind !== 'm3u-text';
+            const isRefreshing = refreshingId === pl.id;
+            const confirming = confirmDeleteId === pl.id;
 
             return (
               <div
@@ -190,7 +188,7 @@ export function PlaylistsManagerView({
                     {pl.title}
                   </h3>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {pl.serverUrl || pl.url || pl.filePath || pl.macAddress || 'Source locale'}
+                    {pl.serverUrl || pl.portalUrl || pl.url || pl.filePath || pl.macAddress || 'Source locale'}
                   </p>
 
                   {pl.counts ? (
@@ -218,17 +216,45 @@ export function PlaylistsManagerView({
                     flux total
                   </div>
 
-                  <button
-                    type="button"
-                    title="Supprimer cette source"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeletePlaylist(pl.id);
-                    }}
-                    className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-rose-500/15 hover:text-rose-500"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {canRefresh ? (
+                      <button
+                        type="button"
+                        disabled={isRefreshing}
+                        title="Actualiser cette source"
+                        aria-label="Actualiser cette source"
+                        onClick={() => void handleRefresh(pl)}
+                        className="inline-flex h-8 items-center gap-1 rounded-full border border-border bg-elevated px-2.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/40 disabled:opacity-60"
+                      >
+                        <RefreshCw className={cn('size-3.5', isRefreshing && 'animate-spin')} />
+                        <span>Actualiser</span>
+                      </button>
+                    ) : null}
+
+                    {confirming ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmDeleteId(null);
+                          onDeletePlaylist(pl.id);
+                        }}
+                        onBlur={() => setConfirmDeleteId(null)}
+                        className="inline-flex h-8 items-center rounded-full bg-rose-600 px-3 text-[11px] font-bold text-white hover:bg-rose-500"
+                      >
+                        Confirmer ?
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        title="Supprimer cette source"
+                        aria-label="Supprimer cette source"
+                        onClick={() => setConfirmDeleteId(pl.id)}
+                        className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-rose-500/15 hover:text-rose-500"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );

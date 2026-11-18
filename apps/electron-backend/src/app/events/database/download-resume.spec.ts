@@ -47,7 +47,10 @@ describe('download resume validation', () => {
                     Range: 'bytes=50-',
                 }),
             }),
-            { allowPrivateNetworks: true }
+            {
+                allowPrivateNetworks: true,
+                allowPrivateNetworkRedirects: false,
+            }
         );
         expect(harness.createWriteStream).toHaveBeenCalledWith(
             '/downloads/movie.mp4.part',

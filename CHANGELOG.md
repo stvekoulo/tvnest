@@ -11,6 +11,20 @@ this marker — see `.changes/README.md`.
 
 <!-- next-release -->
 
+# [1.1.0](https://github.com/stvekoulo/tvnest/compare/v1.0.17...v1.1.0) (2026-11-18)
+
+### Features
+
+- **stalker** — Live channels now load all categories properly, parse integer genres cleanly, and auto-negotiate playback links via `create_link` with required headers.
+- **parental-lock** — Added a 4-digit SHA-256 PIN parental control with category locking across Live TV, Movies, and Series.
+- **performance** — Catalog queries, category counters, and dashboard highlights now run off the main thread in the SQLite worker backed by FTS5 full-text search.
+- **player** — Unified resume-position prompts, OSD feedback, and external MPV/VLC playback hardening with WebGL2/SHM memory leak cleanup and fullscreen focus restoration.
+
+### Security & Stability
+
+- **security** — Enforced `sandbox: true` by default on `BrowserWindow`, tightened CSP with bundled fonts, restricted private-network redirect chaining during downloads/EPG fetches, and validated playback URLs strictly across embedded and external players.
+- **workspace** — Unified the monorepo onto pnpm workspace dependencies (`apps/web` included), modularized large React views (`<= 300` lines), and hardened EPG/XTREAM/M3U error handling.
+
 # [1.0.17](https://github.com/stvekoulo/tvnest/compare/v1.0.16...v1.0.17) (2026-10-28)
 
 ### Features

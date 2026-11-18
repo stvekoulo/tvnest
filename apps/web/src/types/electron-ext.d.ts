@@ -1,5 +1,4 @@
 // Augmentation TypeScript des méthodes IPC SQLite TVNest sur ElectronBridgeApi.
-// Les types viennent du backend : une seule source de vérité pour le contrat IPC.
 import '@iptvnator/shared/interfaces';
 import type {
   CatalogFilterQuery,
@@ -8,7 +7,7 @@ import type {
   CategoryWithCountRow,
   DashboardHighlightsResult,
   PlaylistStreamCounts,
-} from '../../../electron-backend/src/app/database/operations/catalog-filter.types';
+} from '@iptvnator/shared/interfaces';
 
 export type DbCatalogQueryPayload = CatalogFilterQuery;
 export type DbCatalogRow = CatalogStreamRow;

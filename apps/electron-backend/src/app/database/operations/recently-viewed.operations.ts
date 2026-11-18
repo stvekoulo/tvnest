@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import * as schema from '@iptvnator/shared/database/schema';
 import type { AppDatabase } from '../database.types';
 import { persistContentMetadataIfMissing } from './content-metadata.operations';
@@ -125,23 +125,9 @@ export async function clearPlaylistRecentItems(
     db: AppDatabase,
     playlistId: string
 ): Promise<{ success: boolean }> {
-    const contentIds = await db
-        .select({ id: schema.content.id })
-        .from(schema.content)
-        .innerJoin(
-            schema.categories,
-            eq(schema.content.categoryId, schema.categories.id)
-        )
-        .where(eq(schema.categories.playlistId, playlistId));
-
-    if (contentIds.length > 0) {
-        await db.delete(schema.recentlyViewed).where(
-            inArray(
-                schema.recentlyViewed.contentId,
-                contentIds.map((content) => content.id)
-            )
-        );
-    }
+    await db
+        .delete(schema.recentlyViewed)
+        .where(eq(schema.recentlyViewed.playlistId, playlistId));
 
     return { success: true };
 }

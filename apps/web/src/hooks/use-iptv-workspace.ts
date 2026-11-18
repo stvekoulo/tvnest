@@ -1,10 +1,11 @@
 // Hook principal d'orchestration TVNest (sources, recherche SQLite, lecteur et fiche dédiée).
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCatalogQuery } from '@/hooks/use-catalog-query';
+import { type ResumePrompt, useIptvPlayback } from '@/hooks/use-iptv-playback';
 import { usePlaylistActions } from '@/hooks/use-playlist-actions';
-import { forgetSessionPosition, getSessionPosition } from '@/hooks/use-tvnest-player';
-import { shouldOfferResume } from '@/lib/resume-point';
-import { listEpisodeMedia, nextEpisodeIn } from '@/lib/series-episodes';
+import { clearCachedRails } from '@/hooks/use-section-rails';
+import { useWorkspaceIpcEvents } from '@/hooks/use-workspace-ipc-events';
+import { clearCachedPages } from '@/services/catalog-page-cache';
 import {
   fetchSavedPlaylists,
   isElectronRuntime,
@@ -16,10 +17,7 @@ import {
 } from '@/services/ipc-series.service';
 import {
   getDownloadsAndRecordings,
-  fetchSavedPlaybackPosition,
-  launchExternalPlayer,
   loadPreferences,
-  saveExternalPlaybackProgress,
   savePreferences,
   startVodDownload,
 } from '@/services/ipc-system.service';
@@ -29,16 +27,12 @@ import type {
   ElectronDownloadItem,
   ElectronRecordingItem,
   SeriesDetail,
+  UnifiedCategory,
   UnifiedMedia,
   UnifiedPlaylist,
 } from '@/types/iptv.types';
 
-export interface ResumePrompt {
-  item: UnifiedMedia;
-  expand: boolean;
-  positionSeconds: number;
-  durationSeconds?: number;
-}
+export type { ResumePrompt };
 
 export function useIptvWorkspace() {
   const [section, setSectionState] = useState<AppSection>('dashboard');
@@ -48,24 +42,17 @@ export function useIptvWorkspace() {
   const [loading, setLoading] = useState<boolean>(true);
   const [syncLabel, setSyncLabel] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-
-  const [activeMedia, setActiveMedia] = useState<UnifiedMedia | null>(null);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [theaterOpen, setTheaterOpen] = useState<boolean>(false);
-  const theaterOpenRef = useRef(theaterOpen);
-  theaterOpenRef.current = theaterOpen;
   const [addSourceOpen, setAddSourceOpen] = useState<boolean>(false);
 
-  // État de la page dédiée Film / Série (remplace l'ancien modal).
   const [detailMedia, setDetailMedia] = useState<UnifiedMedia | null>(null);
   const [seriesDetail, setSeriesDetail] = useState<SeriesDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const [downloads, setDownloads] = useState<ElectronDownloadItem[]>([]);
   const [recordings, setRecordings] = useState<ElectronRecordingItem[]>([]);
   const [prefs, setPrefs] = useState<AppPreferences>(() => loadPreferences());
 
-  // Un nouveau message repart pour 3,5 s : l'ancien minuteur ne l'efface pas avant.
   const toastTimerRef = useRef<number | undefined>(undefined);
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -73,9 +60,7 @@ export function useIptvWorkspace() {
     toastTimerRef.current = window.setTimeout(() => setToast(null), 3500);
   }, []);
 
-  // Fermer la fiche invalide aussi sa requête en cours (une réponse tardive est ignorée).
   const detailRequestRef = useRef(0);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const closeMediaDetail = useCallback(() => {
     detailRequestRef.current += 1;
     setDetailMedia(null);
@@ -84,8 +69,6 @@ export function useIptvWorkspace() {
     setDetailLoading(false);
   }, []);
 
-  // Changement de rubrique en transition : le menu réagit tout de suite, le rendu du
-  // catalogue suit sans bloquer l'interface.
   const setSection = useCallback(
     (next: AppSection) => {
       closeMediaDetail();
@@ -101,62 +84,11 @@ export function useIptvWorkspace() {
 
   const catalog = useCatalogQuery(activePlaylist, section, prefs, notify);
 
-  // Source d'un média : un résultat de la recherche globale peut venir d'une autre source
-  // que la source active (identifiants Xtream, user-agent…).
   const playlistOf = useCallback(
     (item: UnifiedMedia | null | undefined) =>
       (item && playlists.find((p) => p.id === item.playlistId)) || activePlaylist,
     [playlists, activePlaylist]
   );
-
-  const refreshPlaylists = useCallback(async () => {
-    setLoading(true);
-    try {
-      const list = await fetchSavedPlaylists();
-      setPlaylists(list);
-      setActivePlaylistId((curr) => curr ?? list[0]?.id ?? null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshPlaylists();
-    if (!isElectronRuntime()) return;
-
-    window.electron.onEpgProgress?.((prog) => {
-      setSyncLabel(prog.status === 'loading' ? `EPG : ${prog.url}` : null);
-    });
-    const unsubDl = window.electron.onDownloadsUpdate?.(() => {
-      getDownloadsAndRecordings().then((res) => {
-        setDownloads(res.downloads);
-        setRecordings(res.recordings);
-      });
-    });
-    const unsubBack = window.electron.onWindowBackRequested?.(() => {
-      if (theaterOpenRef.current) setTheaterOpen(false);
-      else closeMediaDetail();
-    });
-    // MPV / VLC externes : leur position remonte toutes les 5 s et est enregistrée ici.
-    const unsubExternal = window.electron.onPlaybackPositionUpdate?.(saveExternalPlaybackProgress);
-    return () => {
-      unsubDl?.();
-      unsubBack?.();
-      unsubExternal?.();
-    };
-  }, [refreshPlaylists, closeMediaDetail]);
-
-  useEffect(() => {
-    if (section === 'downloads') {
-      getDownloadsAndRecordings().then((res) => {
-        setDownloads(res.downloads);
-        setRecordings(res.recordings);
-      });
-    }
-  }, [section]);
-
-  // Ouvre la page complète dédiée d'un film ou d'une série avec métadonnées serveur.
-  // Fiche ouverte en dernier : une réponse plus lente d'une fiche précédente est ignorée.
 
   const openMediaDetail = useCallback(
     async (item: UnifiedMedia) => {
@@ -191,152 +123,137 @@ export function useIptvWorkspace() {
     [playlistOf]
   );
 
-  // Lecteur externe (MPV / VLC). Le lecteur intégré est arrêté avant : beaucoup de comptes
-  // IPTV n'autorisent qu'une connexion à la fois, et le serveur refuserait celle de MPV.
-  // `positionSeconds` : position atteinte dans le lecteur intégré, reprise par MPV / VLC.
-  const openExternal = useCallback(
-    async (player: 'mpv' | 'vlc', item: UnifiedMedia, positionSeconds?: number) => {
-      setTheaterOpen(false);
-      setIsPlaying(false);
-      setActiveMedia(null);
-      const target =
-        positionSeconds && positionSeconds > 5 && item.kind !== 'live'
-          ? { ...item, progressSeconds: positionSeconds }
-          : item;
-      const label = player.toUpperCase();
-      // Venu du lecteur intégré : laisser le serveur libérer la connexion qu'il vient de fermer.
-      // ponytail: délai fixe ; à remplacer par l'attente de fin de session si 600 ms ne suffisent pas.
-      if (positionSeconds !== undefined) await new Promise((r) => setTimeout(r, 600));
-      try {
-        const session = await launchExternalPlayer(player, target, playlistOf(item));
-        notify(
-          session.status === 'error'
-            ? `${label} n'a pas pu lire le flux : ${session.error ?? 'erreur inconnue'}`
-            : `Ouvert dans ${label}`
-        );
-      } catch (err) {
-        notify(`${label} : ${(err as Error).message}`);
+  const playback = useIptvPlayback({
+    prefs,
+    seriesDetail,
+    playlistOf,
+    openMediaDetail,
+    notify,
+  });
+
+  const theaterOpenRef = useRef(playback.theaterOpen);
+  theaterOpenRef.current = playback.theaterOpen;
+  const prevActiveMediaRef = useRef<UnifiedMedia | null>(null);
+
+  useEffect(() => {
+    const prev = prevActiveMediaRef.current;
+    prevActiveMediaRef.current = playback.activeMedia;
+    if (prev?.kind === 'episode' && !playback.activeMedia && detailMedia?.kind === 'series') {
+      const source = playlistOf(detailMedia);
+      if (source?.kind === 'xtream') {
+        void fetchXtreamSeriesDetail(source, detailMedia)
+          .then((detail) => setSeriesDetail(detail))
+          .catch(() => {});
       }
-    },
-    [playlistOf, notify]
+    }
+  }, [playback.activeMedia, detailMedia, playlistOf]);
+
+  const refreshPlaylists = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await fetchSavedPlaylists();
+      setPlaylists(list);
+      setActivePlaylistId((curr) => curr ?? list[0]?.id ?? null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const refreshDownloads = useCallback(
+    () =>
+      getDownloadsAndRecordings().then((r) => {
+        setDownloads(r.downloads);
+        setRecordings(r.recordings);
+      }),
+    []
   );
 
-  const [resumePrompt, setResumePrompt] = useState<ResumePrompt | null>(null);
+  useWorkspaceIpcEvents({
+    parentalLockEnabled: prefs.parentalLockEnabled,
+    theaterOpenRef,
+    setTheaterOpen: playback.setTheaterOpen,
+    closeMediaDetail,
+    setSyncLabel,
+    refreshPlaylists,
+    refreshDownloads,
+    setActivePlaylistId,
+    notify,
+  });
 
-  // File d'épisodes de la série en cours : source de l'« Épisode suivant » automatique.
-  const [episodeQueue, setEpisodeQueue] = useState<UnifiedMedia[]>([]);
-
-  const startPlayback = useCallback(
-    (item: UnifiedMedia, expandTheater: boolean) => {
-      if (item.kind === 'episode') {
-        const queue = seriesDetail ? listEpisodeMedia(seriesDetail) : [];
-        setEpisodeQueue(queue.some((ep) => ep.id === item.id) ? queue : []);
-      } else {
-        setEpisodeQueue([]);
-      }
-      setActiveMedia(item);
-      setIsPlaying(true);
-      if (expandTheater) setTheaterOpen(true);
-    },
-    [seriesDetail]
-  );
-
-  const nextEpisode = useMemo(
-    () => (activeMedia?.kind === 'episode' ? nextEpisodeIn(episodeQueue, activeMedia.id) : null),
-    [episodeQueue, activeMedia]
-  );
-
-  // Enchaîne l'épisode suivant depuis le début, dans la même vue (Cinéma reste ouvert).
-  const playNextEpisode = useCallback(() => {
-    if (!nextEpisode) return;
-    forgetSessionPosition(nextEpisode.id);
-    setActiveMedia({ ...nextEpisode, progressSeconds: 0 });
-    setIsPlaying(true);
-  }, [nextEpisode]);
-
-  const playStream = useCallback(
-    async (item: UnifiedMedia, expandTheater = false) => {
-      if (item.kind === 'series') {
-        await openMediaDetail(item);
-        return;
-      }
-      if (prefs.defaultPlayer !== 'builtin' && isElectronRuntime()) {
-        await openExternal(prefs.defaultPlayer, item);
-        return;
-      }
-      // Film ou épisode déjà entamé : on propose « Reprendre » ou « Recommencer ».
-      if (item.kind === 'movie' || item.kind === 'episode') {
-        const saved = await fetchSavedPlaybackPosition(item);
-        const position = getSessionPosition(item.id) ?? saved?.positionSeconds ?? item.progressSeconds ?? 0;
-        const duration = saved?.durationSeconds ?? item.durationSeconds;
-        if (shouldOfferResume(position, duration)) {
-          setResumePrompt({ item, expand: expandTheater, positionSeconds: position, durationSeconds: duration });
-          return;
-        }
-      }
-      startPlayback(item, expandTheater);
-    },
-    [prefs.defaultPlayer, openExternal, openMediaDetail, startPlayback]
-  );
-
-  // Lecture à une position choisie (Reprendre / Recommencer), sans redemander.
-  const playAt = useCallback(
-    async (item: UnifiedMedia, positionSeconds: number, expandTheater = false) => {
-      if (positionSeconds <= 0) forgetSessionPosition(item.id);
-      if (prefs.defaultPlayer !== 'builtin' && isElectronRuntime()) {
-        await openExternal(prefs.defaultPlayer, item, positionSeconds || undefined);
-        return;
-      }
-      startPlayback({ ...item, progressSeconds: positionSeconds }, expandTheater);
-    },
-    [prefs.defaultPlayer, openExternal, startPlayback]
-  );
-
-  const answerResumePrompt = useCallback(
-    (choice: 'resume' | 'restart' | 'cancel') => {
-      const prompt = resumePrompt;
-      setResumePrompt(null);
-      if (!prompt || choice === 'cancel') return;
-      void playAt(prompt.item, choice === 'restart' ? 0 : prompt.positionSeconds, prompt.expand);
-    },
-    [resumePrompt, playAt]
-  );
+  useEffect(() => {
+    if (section === 'downloads') void refreshDownloads();
+  }, [section, refreshDownloads]);
 
   const toggleFavorite = useCallback(
     async (item: UnifiedMedia) => {
       const next = await toggleMediaFavoriteInDb(item);
       catalog.patchMediaFavorite(item.id, next);
-      setActiveMedia((curr) => (curr?.id === item.id ? { ...curr, isFavorite: next } : curr));
+      playback.setActiveMedia((curr) => (curr?.id === item.id ? { ...curr, isFavorite: next } : curr));
       setDetailMedia((curr) => (curr?.id === item.id ? { ...curr, isFavorite: next } : curr));
       void catalog.reloadOverview();
     },
-    [catalog]
+    [catalog, playback]
   );
 
-  const { addSource, deletePlaylist } = usePlaylistActions({
+  const { addSource, refreshSource, deletePlaylist } = usePlaylistActions({
     activePlaylistId,
     setActivePlaylistId,
     setPlaylists,
     setSyncLabel,
     notify,
+    onCatalogInvalidated: () => {
+      catalog.reloadCategories();
+      void catalog.reloadOverview();
+    },
+    onPlaylistDeleted: (id) => {
+      if (playback.activeMedia?.playlistId === id) playback.stopPlayback();
+      if (detailMedia?.playlistId === id) closeMediaDetail();
+    },
   });
 
   const updatePrefs = useCallback(
     async (patch: Partial<AppPreferences>) => {
       const next = { ...prefs, ...patch };
+      const parentalChanged =
+        patch.parentalLockEnabled !== undefined &&
+        patch.parentalLockEnabled !== prefs.parentalLockEnabled;
       setPrefs(next);
       await savePreferences(next);
+      if (parentalChanged) {
+        clearCachedPages();
+        clearCachedRails();
+        catalog.reloadCategories();
+        void catalog.reloadOverview();
+      }
       notify('Préférences enregistrées');
     },
-    [prefs, notify]
+    [prefs, catalog, notify]
+  );
+
+  const toggleCategoryLock = useCallback(
+    async (cat: UnifiedCategory) => {
+      if (!isElectronRuntime() || !cat.dbId || !window.electron.dbSetCategoryLocked) return;
+      const nextLocked = !cat.locked;
+      await window.electron.dbSetCategoryLocked(cat.dbId, nextLocked);
+      clearCachedPages();
+      clearCachedRails();
+      catalog.reloadCategories();
+      void catalog.reloadOverview();
+      notify(nextLocked ? `Groupe « ${cat.name} » verrouillé` : `Groupe « ${cat.name} » déverrouillé`);
+    },
+    [catalog, notify]
   );
 
   const downloadMedia = useCallback(
     async (item: UnifiedMedia) => {
-      await startVodDownload(item);
-      notify(`Téléchargement lancé : ${item.title}`);
+      try {
+        await startVodDownload(item, playlistOf(item));
+        notify(`Téléchargement lancé : ${item.title}`);
+      } catch (err) {
+        notify(`Téléchargement impossible : ${(err as Error).message}`);
+      }
     },
-    [notify]
+    [playlistOf, notify]
   );
 
   return {
@@ -370,22 +287,18 @@ export function useIptvWorkspace() {
     setSyncLabel,
     toast,
     notify,
-    activeMedia,
-    isPlaying,
-    setIsPlaying,
-    openExternal,
-    resumePrompt,
-    playAt,
-    answerResumePrompt,
-    nextEpisode,
-    playNextEpisode,
-    stopPlayback: () => {
-      setTheaterOpen(false);
-      setIsPlaying(false);
-      setActiveMedia(null);
-    },
-    theaterOpen,
-    setTheaterOpen,
+    activeMedia: playback.activeMedia,
+    isPlaying: playback.isPlaying,
+    setIsPlaying: playback.setIsPlaying,
+    openExternal: playback.openExternal,
+    resumePrompt: playback.resumePrompt,
+    playAt: playback.playAt,
+    answerResumePrompt: playback.answerResumePrompt,
+    nextEpisode: playback.nextEpisode,
+    playNextEpisode: playback.playNextEpisode,
+    stopPlayback: playback.stopPlayback,
+    theaterOpen: playback.theaterOpen,
+    setTheaterOpen: playback.setTheaterOpen,
     addSourceOpen,
     setAddSourceOpen,
     detailMedia,
@@ -399,15 +312,13 @@ export function useIptvWorkspace() {
     recordings,
     prefs,
     updatePrefs,
-    playStream,
+    toggleCategoryLock,
+    playStream: playback.playStream,
     toggleFavorite,
     addSource,
+    refreshSource,
     deletePlaylist,
     downloadMedia,
-    refreshDownloads: () =>
-      getDownloadsAndRecordings().then((r) => {
-        setDownloads(r.downloads);
-        setRecordings(r.recordings);
-      }),
+    refreshDownloads,
   };
 }

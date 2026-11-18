@@ -12,19 +12,8 @@ const require = createRequire(import.meta.url);
 const packageMetadata = JSON.parse(
     fs.readFileSync(join(currentDir, '..', '..', 'package.json'), 'utf8')
 );
-const buildAndMakeWorkflow = fs.readFileSync(
-    join(currentDir, '..', '..', '.github', 'workflows', 'build-and-make.yaml'),
-    'utf8'
-);
-const windowsRuntimeRefreshWorkflow = fs.readFileSync(
-    join(
-        currentDir,
-        '..',
-        '..',
-        '.github',
-        'workflows',
-        'refresh-windows-embedded-mpv-runtime.yaml'
-    ),
+const buildWindowsWorkflow = fs.readFileSync(
+    join(currentDir, '..', '..', '.github', 'workflows', 'build-windows.yml'),
     'utf8'
 );
 const windowsRuntimePin = readWindowsRuntimePin();
@@ -151,11 +140,11 @@ function writeWindowsHelperFixture(helperPath, importedDllName) {
 }
 
 test('Linux package identity does not expose the internal Electron backend project name', () => {
-    assert.equal(electronBuilderConfig.productName, 'IPTVnator');
-    assert.equal(electronBuilderConfig.extraMetadata?.name, 'iptvnator');
-    assert.equal(electronBuilderConfig.extraMetadata?.productName, 'IPTVnator');
-    assert.equal(electronBuilderConfig.linux?.executableName, 'iptvnator');
-    assert.equal(electronBuilderConfig.extraMetadata?.desktopName, 'iptvnator');
+    assert.equal(electronBuilderConfig.productName, 'TVNest');
+    assert.equal(electronBuilderConfig.extraMetadata?.name, 'tvnest');
+    assert.equal(electronBuilderConfig.extraMetadata?.productName, 'TVNest');
+    assert.equal(electronBuilderConfig.linux?.executableName, 'tvnest');
+    assert.equal(electronBuilderConfig.extraMetadata?.desktopName, 'tvnest');
     assert.ok(
         electronBuilderConfig.linux?.executableArgs?.includes(
             '--ozone-platform=x11'
@@ -175,8 +164,8 @@ test('AppImage desktop metadata supports AppManager without changing other Linux
     );
     for (const version of [
         packageMetadata.version,
-        '0.24.1',
-        '0.25.0-beta.1',
+        '1.0.17',
+        '1.1.0-beta.1',
     ]) {
         const config = structuredClone(electronBuilderConfig);
         const packager = {
@@ -211,17 +200,17 @@ test('AppImage desktop metadata supports AppManager without changing other Linux
                     ];
                 })
         );
-        assert.equal(fields['X-AppImage-Name'], 'IPTVnator');
+        assert.equal(fields['X-AppImage-Name'], 'TVNest');
         assert.equal(fields['X-AppImage-Version'], version);
         assert.equal(
             fields['X-AppImage-Homepage'],
-            'https://github.com/4gray/iptvnator'
+            'https://github.com/stvekoulo/tvnest'
         );
         assert.equal(
             fields['X-AppImage-UpdateURL'],
-            'https://github.com/4gray/iptvnator'
+            'https://github.com/stvekoulo/tvnest'
         );
-        assert.equal(fields.StartupWMClass, 'iptvnator');
+        assert.equal(fields.StartupWMClass, 'tvnest');
         assert.equal(fields.Exec, 'AppRun --ozone-platform=x11 %U');
         assert.equal(
             fields.MimeType,
@@ -231,11 +220,11 @@ test('AppImage desktop metadata supports AppManager without changing other Linux
         assert.equal(fields['X-AppImage-Arch'], undefined);
         const otherDesktop = await helper.computeDesktopEntry(
             config.linux,
-            'iptvnator %U'
+            'tvnest %U'
         );
         assert.doesNotMatch(otherDesktop, /^X-AppImage-/m);
-        assert.match(otherDesktop, /^StartupWMClass=iptvnator$/m);
-        assert.equal(helper.getDesktopFileName(), 'iptvnator');
+        assert.match(otherDesktop, /^StartupWMClass=tvnest$/m);
+        assert.equal(helper.getDesktopFileName(), 'tvnest');
     }
 });
 
@@ -277,13 +266,6 @@ test('playlist file associations are registered with the operating system', () =
 });
 
 test('GitHub Releases auto-update metadata is generated and uploaded', () => {
-    // \r?\n keeps this host-agnostic: Windows checkouts with autocrlf see
-    // CRLF in the workflow file.
-    const releaseFiles = buildAndMakeWorkflow.match(
-        /files: \|\r?\n([\s\S]*?)\r?\n\s+env:/
-    )?.[1];
-
-    assert.ok(releaseFiles, 'release upload files block must exist');
     assert.ok(
         packageMetadata.dependencies?.['electron-updater'],
         'electron-updater must be a runtime dependency because the packaged app imports it'
@@ -291,53 +273,15 @@ test('GitHub Releases auto-update metadata is generated and uploaded', () => {
     assert.deepEqual(electronBuilderConfig.publish, [
         {
             provider: 'github',
-            owner: '4gray',
-            repo: 'iptvnator',
+            owner: 'stvekoulo',
+            repo: 'tvnest',
+            releaseType: 'draft',
         },
     ]);
-    assert.deepEqual(electronBuilderConfig.mac?.target, [
-        {
-            target: 'dmg',
-            arch: ['x64', 'arm64'],
-        },
-        {
-            target: 'zip',
-            arch: ['x64', 'arm64'],
-        },
-    ]);
-    assert.match(buildAndMakeWorkflow, /dist\/executables\/\*\*\/latest\.yml/);
-    assert.match(
-        buildAndMakeWorkflow,
-        /dist\/executables\/\*\*\/latest-mac\.yml/
-    );
-    assert.match(
-        buildAndMakeWorkflow,
-        /dist\/executables\/\*\*\/latest-linux\*\.yml/
-    );
-    assert.match(buildAndMakeWorkflow, /dist\/executables\/\*\*\/\*\.blockmap/);
-    assert.match(buildAndMakeWorkflow, /Merge macOS updater metadata/);
-    assert.match(buildAndMakeWorkflow, /artifacts\/latest-mac\.yml/);
-    assert.doesNotMatch(
-        releaseFiles,
-        /artifacts\/macos-(?:x64|arm64)-artifacts\/latest-mac\.yml/
-    );
-    assert.match(
-        buildAndMakeWorkflow,
-        /artifacts\/linux-portable-artifacts\/latest-linux\*\.yml/
-    );
-    assert.match(
-        buildAndMakeWorkflow,
-        /artifacts\/windows-artifacts\/latest\.yml/
-    );
-
-    const makeCommands = [
-        ...buildAndMakeWorkflow.matchAll(/run: (pnpm run make:app[^\n]*)/g),
-    ].map((match) => match[1].trim());
-    assert.ok(makeCommands.length >= 2, 'workflow must package Electron apps');
-    assert.deepEqual(
-        [...new Set(makeCommands)],
-        ['pnpm run make:app -- --publishPolicy=never']
-    );
+    assert.match(buildWindowsWorkflow, /latest\.yml/);
+    assert.match(buildWindowsWorkflow, /blockmap/);
+    assert.match(buildWindowsWorkflow, /pnpm run make:app -- --publishPolicy=never/);
+    assert.match(buildWindowsWorkflow, /pnpm run make:app -- --publishPolicy=always/);
 });
 
 test('generated Electron package metadata mirrors the root package identity', async () => {
@@ -457,7 +401,7 @@ test('package layout verifier uses canonical helpers and direct dependencies', (
     );
 
     const launcherVerifier = packageLayoutVerifier.match(
-        /function verifyLinuxLauncher\([\s\S]*?\n}\n\nfunction verifyFlatpakPermissions/
+        /function verifyLinuxLauncher\([\s\S]*?\r?\n\}\r?\n\r?\nfunction verifyFlatpakPermissions/
     )?.[0];
     assert.ok(launcherVerifier);
     assert.ok(
@@ -968,7 +912,7 @@ test('frame-copy packaging file operations enforce modes and remove stale artifa
 });
 
 test('Windows CI packages embedded MPV from a staged x64 runtime', () => {
-    const requireEmbeddedMpvLines = buildAndMakeWorkflow
+    const requireEmbeddedMpvLines = buildWindowsWorkflow
         .split(/\r?\n/)
         .filter((line) => line.includes('IPTVNATOR_REQUIRE_EMBEDDED_MPV:'));
 
@@ -977,74 +921,24 @@ test('Windows CI packages embedded MPV from a staged x64 runtime', () => {
         'node tools/embedded-mpv/stage-windows-runtime-archive.mjs'
     );
     assert.match(
-        buildAndMakeWorkflow,
-        /name:\s+Stage Windows embedded MPV runtime archive/
-    );
-    assert.match(buildAndMakeWorkflow, /runner:\s+windows-2022/);
-    assert.match(
-        buildAndMakeWorkflow,
+        buildWindowsWorkflow,
         /name:\s+Resolve pinned Windows Embedded MPV runtime/
     );
     assert.match(
-        buildAndMakeWorkflow,
+        buildWindowsWorkflow,
         /node tools\/embedded-mpv\/windows-runtime-pin\.mjs --github-output/
     );
     assert.match(
-        buildAndMakeWorkflow,
-        /WINDOWS_RUNTIME_URL:\s+\$\{\{ steps\.windows-embedded-mpv-runtime-pin\.outputs\.url \}\}/
+        buildWindowsWorkflow,
+        /pnpm embedded-mpv:stage-runtime:windows-archive/
     );
-    assert.match(
-        buildAndMakeWorkflow,
-        /WINDOWS_RUNTIME_SHA256:\s+\$\{\{ steps\.windows-embedded-mpv-runtime-pin\.outputs\.sha256 \}\}/
-    );
-    assert.doesNotMatch(
-        buildAndMakeWorkflow,
-        /(?:vars|secrets)\.IPTVNATOR_WINDOWS_EMBEDDED_MPV_RUNTIME/
-    );
-    assert.doesNotMatch(buildAndMakeWorkflow, /zhongfly\/mpv-winbuild/);
+    assert.doesNotMatch(buildWindowsWorkflow, /zhongfly\/mpv-winbuild/);
     assert.equal(windowsRuntimePin.repository, 'zhongfly/mpv-winbuild');
     assert.match(windowsRuntimePin.asset.name, /^mpv-dev-lgpl-x86_64-/);
     assert.match(windowsRuntimePin.asset.sha256, /^[a-f0-9]{64}$/);
     assert.match(
         windowsRuntimePin.upstream.licenseClaim,
         /checksum and archive layout, not the complete transitive license closure/
-    );
-    assert.match(
-        windowsRuntimeRefreshWorkflow,
-        /node tools\/embedded-mpv\/update-windows-runtime-pin\.mjs/
-    );
-    assert.match(
-        windowsRuntimeRefreshWorkflow,
-        /node --test\s+tools\/embedded-mpv\/windows-runtime-pin\.test\.mjs/
-    );
-    assert.doesNotMatch(
-        windowsRuntimeRefreshWorkflow,
-        /electron-package-identity\.test\.mjs/
-    );
-    assert.match(
-        windowsRuntimeRefreshWorkflow,
-        /automation\/windows-embedded-mpv-runtime-pin/
-    );
-    assert.match(windowsRuntimeRefreshWorkflow, /secrets\.PAT/);
-    assert.match(
-        windowsRuntimeRefreshWorkflow,
-        /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/
-    );
-    assert.match(
-        windowsRuntimeRefreshWorkflow,
-        /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/
-    );
-    assert.doesNotMatch(
-        windowsRuntimeRefreshWorkflow,
-        /actions\/(?:checkout|setup-node)@v\d+/
-    );
-    assert.match(
-        buildAndMakeWorkflow,
-        /name:\s+Override Windows arch in electron-builder\.json/
-    );
-    assert.match(
-        buildAndMakeWorkflow,
-        /IPTVNATOR_REQUIRE_EMBEDDED_MPV:\s+\$\{\{\s*\(matrix\.os == 'linux' \|\| matrix\.os == 'windows'/
     );
     assert.match(embeddedMpvStageRuntimeSource, /\.dll\.a/);
     assert.match(embeddedMpvBuildSource, /\.dll\.a/);

@@ -1,17 +1,20 @@
-// Modale d'ajout de sources IPTV TVNest avec champs @beui/input et bouton d'état animé.
+// Modale d'ajout de sources IPTV TVNest avec champs @beui/input et validation d'entrée.
 import { FileText, FolderOpen, Globe, Radio, Server, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, StatefulButton, type ButtonState } from '@/components/motion/button';
 import { Input } from '@/components/motion/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { TvNestLogo } from '@/components/shell/tvnest-logo';
+
+const HTTP_URL_RE = /^https?:\/\/.+/i;
+const MAC_ADDRESS_RE = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
 
 interface SourceImportModalProps {
   open: boolean;
   onClose: () => void;
   addSource: {
     m3uUrl: (url: string, title: string, ua?: string) => Promise<void>;
-    m3uFile: () => Promise<void>;
+    m3uFile: () => Promise<boolean>;
     m3uText: (text: string, title: string) => Promise<void>;
     xtream: (p: {
       title: string;
@@ -43,13 +46,34 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
   const [stUrl, setStUrl] = useState('');
   const [stMac, setStMac] = useState('00:1A:79:');
 
+  useEffect(() => {
+    setBtnState('idle');
+    setErr(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
-  const exec = async (fn: () => Promise<void>) => {
+  const exec = async (fn: () => Promise<boolean | void>) => {
     setBtnState('loading');
     setErr(null);
     try {
-      await fn();
+      const outcome = await fn();
+      if (outcome === false) {
+        setBtnState('idle');
+        return;
+      }
       setBtnState('success');
       setTimeout(() => {
         setBtnState('idle');
@@ -62,7 +86,10 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
   };
 
   return (
-    <div data-tvnest-overlay="" className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+    <div
+      data-tvnest-overlay=""
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+    >
       <div className="w-full max-w-xl overflow-hidden rounded-[30px] border border-border bg-card p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -78,6 +105,7 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
           </div>
           <button
             type="button"
+            aria-label="Fermer"
             onClick={onClose}
             className="inline-flex size-8 items-center justify-center rounded-full border border-border bg-elevated text-muted-foreground hover:text-foreground"
           >
@@ -85,7 +113,14 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
           </button>
         </div>
 
-        <Tabs defaultValue="xtream" className="mt-5">
+        <Tabs
+          defaultValue="xtream"
+          onValueChange={() => {
+            setBtnState('idle');
+            setErr(null);
+          }}
+          className="mt-5"
+        >
           <TabsList className="flex w-full flex-wrap">
             <TabsTrigger value="xtream">
               <Server className="size-3.5" /> Xtream
@@ -111,11 +146,7 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
           ) : null}
 
           <TabsContent value="xtream" className="mt-4 space-y-3">
-            <Input
-              placeholder="Nom du portail Xtream"
-              value={title}
-              onChange={setTitle}
-            />
+            <Input placeholder="Nom du portail Xtream" value={title} onChange={setTitle} />
             <Input
               type="url"
               placeholder="URL Serveur (ex: http://line.exemple.tv:8080)"
@@ -123,11 +154,7 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
               onChange={setXtServer}
             />
             <div className="grid grid-cols-2 gap-3">
-              <Input
-                placeholder="Identifiant (Username)"
-                value={xtUser}
-                onChange={setXtUser}
-              />
+              <Input placeholder="Identifiant (Username)" value={xtUser} onChange={setXtUser} />
               <Input
                 type="password"
                 placeholder="Mot de passe"
@@ -142,16 +169,20 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
               disabled={!xtServer.trim() || !xtUser.trim()}
               loadingText="Importation..."
               successText="Portail connecté"
-              onClick={() =>
-                exec(() =>
+              onClick={() => {
+                if (!HTTP_URL_RE.test(xtServer.trim())) {
+                  setErr('Saisissez une URL serveur commençant par http:// ou https://');
+                  return;
+                }
+                void exec(() =>
                   addSource.xtream({
                     title,
                     serverUrl: xtServer,
                     username: xtUser,
                     password: xtPass,
                   })
-                )
-              }
+                );
+              }}
               className="w-full"
             >
               Synchroniser Live, Films & Séries
@@ -181,7 +212,13 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
               state={btnState}
               disabled={!m3uUrl.trim()}
               loadingText="Téléchargement M3U..."
-              onClick={() => exec(() => addSource.m3uUrl(m3uUrl, title, userAgent))}
+              onClick={() => {
+                if (!HTTP_URL_RE.test(m3uUrl.trim())) {
+                  setErr('Saisissez une URL M3U commençant par http:// ou https://');
+                  return;
+                }
+                void exec(() => addSource.m3uUrl(m3uUrl, title, userAgent));
+              }}
               className="w-full"
             >
               Importer la playlist M3U
@@ -197,7 +234,7 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
               <Button
                 size="lg"
                 variant="primary"
-                onClick={() => exec(() => addSource.m3uFile())}
+                onClick={() => void exec(() => addSource.m3uFile())}
                 className="mt-4"
               >
                 Parcourir le disque local
@@ -219,7 +256,7 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
               variant="primary"
               state={btnState}
               disabled={!rawM3u.trim()}
-              onClick={() => exec(() => addSource.m3uText(rawM3u, title))}
+              onClick={() => void exec(() => addSource.m3uText(rawM3u, title))}
               className="w-full"
             >
               Analyser et enregistrer
@@ -248,11 +285,19 @@ export function SourceImportModal({ open, onClose, addSource }: SourceImportModa
               variant="primary"
               state={btnState}
               disabled={!stUrl.trim() || !stMac.trim()}
-              onClick={() =>
-                exec(() =>
+              onClick={() => {
+                if (!HTTP_URL_RE.test(stUrl.trim())) {
+                  setErr('Saisissez une URL portail commençant par http:// ou https://');
+                  return;
+                }
+                if (!MAC_ADDRESS_RE.test(stMac.trim())) {
+                  setErr('Adresse MAC invalide : utilisez le format 00:1A:79:XX:XX:XX.');
+                  return;
+                }
+                void exec(() =>
                   addSource.stalker({ title, portalUrl: stUrl, macAddress: stMac })
-                )
-              }
+                );
+              }}
               className="w-full"
             >
               Connecter le portail MAC

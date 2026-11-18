@@ -87,6 +87,14 @@ async function buildWorker() {
                         __dirname,
                         '../../libs/shared/interfaces/src/index.ts'
                     ),
+                    '@iptvnator/shared/logging': path.join(
+                        __dirname,
+                        '../../libs/shared/logging/src/index.ts'
+                    ),
+                    '@iptvnator/shared/host-health': path.join(
+                        __dirname,
+                        '../../libs/shared/host-health/src/index.ts'
+                    ),
                     '@iptvnator/shared/m3u-utils': path.join(
                         __dirname,
                         '../../libs/shared/m3u-utils/src/index.ts'

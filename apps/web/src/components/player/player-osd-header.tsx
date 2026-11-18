@@ -11,6 +11,7 @@ import type { UnifiedMedia } from '@/types/iptv.types';
 interface PlayerOsdHeaderProps {
   media: UnifiedMedia;
   docked?: boolean;
+  interactive?: boolean;
   engine: PlayerEngineKind;
   resolution: string | null;
   stats?: EmbeddedMpvStreamStats;
@@ -23,6 +24,7 @@ interface PlayerOsdHeaderProps {
 export function PlayerOsdHeader({
   media,
   docked = false,
+  interactive = true,
   engine,
   resolution,
   stats,
@@ -36,7 +38,8 @@ export function PlayerOsdHeader({
   return (
     <div
       className={cn(
-        'pointer-events-auto flex items-center justify-between gap-3 px-5 pt-4',
+        'flex items-center justify-between gap-3 px-5 pt-4',
+        interactive ? 'pointer-events-auto' : 'pointer-events-none',
         docked ? 'pb-2' : 'bg-gradient-to-b from-black/85 via-black/40 to-transparent pb-8'
       )}
     >

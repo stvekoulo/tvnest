@@ -1,7 +1,7 @@
 // Menu contextuel des pistes audio, sous-titres, vitesse et format du lecteur TVNest.
 import { Check, Cpu, FilePlus2, Gauge, Languages, Subtitles } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EmbeddedMpvAudioTrack, EmbeddedMpvSubtitleTrack } from '@iptvnator/shared/interfaces';
 import { SPRING_PANEL } from '@/lib/ease';
 import { cn } from '@/lib/utils';
@@ -48,13 +48,33 @@ export function PlayerTrackPopover({
   onToggleForcedWeb,
 }: PlayerTrackPopoverProps) {
   const [openMenu, setOpenMenu] = useState<'tracks' | 'settings' | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const onPointer = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpenMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [openMenu]);
 
   return (
-    <div className="relative flex items-center gap-1.5">
+    <div ref={rootRef} className="relative flex items-center gap-1.5">
       <button
         type="button"
         onClick={() => setOpenMenu((prev) => (prev === 'tracks' ? null : 'tracks'))}
-        title="Pistes audio & sous-titres"
+        title="Pistes audio et sous-titres"
         className={cn(
           'inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors',
           openMenu === 'tracks'
@@ -68,7 +88,7 @@ export function PlayerTrackPopover({
       <button
         type="button"
         onClick={() => setOpenMenu((prev) => (prev === 'settings' ? null : 'settings'))}
-        title="Vitesse, ratio & moteur"
+        title="Vitesse, ratio et moteur"
         className={cn(
           'inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors',
           openMenu === 'settings'
@@ -96,30 +116,29 @@ export function PlayerTrackPopover({
               {audioTracks.length === 0 ? (
                 <p className="px-2 py-1 text-[11px] text-zinc-500">Piste audio par défaut active</p>
               ) : (
-                audioTracks.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => {
-                      onSelectAudio(t.id);
-                      setOpenMenu(null);
-                    }}
-                    className={cn(
-                      'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[11px]',
-                      selectedAudioId === t.id || t.selected
-                        ? 'bg-white/20 font-semibold text-white'
-                        : 'text-zinc-300 hover:bg-white/10'
-                    )}
-                  >
-                    <span className="truncate">
-                      {t.title || `Piste #${t.id}`}
-                      {t.language ? ` · ${t.language.toUpperCase()}` : ''}
-                    </span>
-                    {selectedAudioId === t.id || t.selected ? (
-                      <Check className="size-3.5 text-white" />
-                    ) : null}
-                  </button>
-                ))
+                audioTracks.map((t) => {
+                  const active = selectedAudioId === t.id || t.selected;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        onSelectAudio(t.id);
+                        setOpenMenu(null);
+                      }}
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[11px]',
+                        active ? 'bg-white/20 font-semibold text-white' : 'text-zinc-300 hover:bg-white/10'
+                      )}
+                    >
+                      <span className="truncate">
+                        {t.title || `Piste #${t.id}`}
+                        {t.language ? ` · ${t.language.toUpperCase()}` : ''}
+                      </span>
+                      {active ? <Check className="size-3.5 text-white" /> : null}
+                    </button>
+                  );
+                })
               )}
             </div>
 
@@ -149,38 +168,35 @@ export function PlayerTrackPopover({
                 }}
                 className={cn(
                   'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[11px]',
-                  !selectedSubtitleId
-                    ? 'bg-white/20 font-semibold text-white'
-                    : 'text-zinc-300 hover:bg-white/10'
+                  !selectedSubtitleId ? 'bg-white/20 font-semibold text-white' : 'text-zinc-300 hover:bg-white/10'
                 )}
               >
                 <span>Désactivés</span>
                 {!selectedSubtitleId ? <Check className="size-3.5 text-white" /> : null}
               </button>
-              {subtitleTracks.map((st) => (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() => {
-                    onSelectSubtitle(st.id);
-                    setOpenMenu(null);
-                  }}
-                  className={cn(
-                    'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[11px]',
-                    selectedSubtitleId === st.id || st.selected
-                      ? 'bg-white/20 font-semibold text-white'
-                      : 'text-zinc-300 hover:bg-white/10'
-                  )}
-                >
-                  <span className="truncate">
-                    {st.title || `Sous-titre #${st.id}`}
-                    {st.language ? ` · ${st.language.toUpperCase()}` : ''}
-                  </span>
-                  {selectedSubtitleId === st.id || st.selected ? (
-                    <Check className="size-3.5 text-white" />
-                  ) : null}
-                </button>
-              ))}
+              {subtitleTracks.map((st) => {
+                const active = selectedSubtitleId === st.id || st.selected;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      onSelectSubtitle(st.id);
+                      setOpenMenu(null);
+                    }}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[11px]',
+                      active ? 'bg-white/20 font-semibold text-white' : 'text-zinc-300 hover:bg-white/10'
+                    )}
+                  >
+                    <span className="truncate">
+                      {st.title || `Sous-titre #${st.id}`}
+                      {st.language ? ` · ${st.language.toUpperCase()}` : ''}
+                    </span>
+                    {active ? <Check className="size-3.5 text-white" /> : null}
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
         ) : null}
@@ -203,7 +219,10 @@ export function PlayerTrackPopover({
                   <button
                     key={s}
                     type="button"
-                    onClick={() => onSpeedChange(s)}
+                    onClick={() => {
+                      onSpeedChange(s);
+                      setOpenMenu(null);
+                    }}
                     className={cn(
                       'rounded-lg py-1 text-[11px] font-semibold transition-colors',
                       speed === s ? 'bg-white text-black' : 'bg-white/10 text-zinc-300 hover:bg-white/20'
@@ -224,7 +243,10 @@ export function PlayerTrackPopover({
                   <button
                     key={a.id}
                     type="button"
-                    onClick={() => onAspectChange(a.id)}
+                    onClick={() => {
+                      onAspectChange(a.id);
+                      setOpenMenu(null);
+                    }}
                     className={cn(
                       'rounded-lg py-1 text-[11px] font-semibold transition-colors',
                       aspect === a.id ? 'bg-white text-black' : 'bg-white/10 text-zinc-300 hover:bg-white/20'

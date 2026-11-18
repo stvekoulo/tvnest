@@ -10,7 +10,7 @@
       "outputs": ["{workspaceRoot}/dist/apps/web"],
       "options": {
         "cwd": "apps/web",
-        "command": "npm.cmd run build"
+        "command": "pnpm run build"
       }
     },
     "serve": {
@@ -18,15 +18,25 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/web",
-        "command": "npm.cmd run dev"
+        "command": "pnpm run dev"
       }
     },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/web",
-        "command": "npm.cmd run typecheck"
+        "command": "pnpm run typecheck"
       }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "command": "node --test tools/testing/tvnest-regressions.test.mjs"
+      }
+    },
+    "lint": {
+      "command": "eslint -c apps/web/eslint.config.mjs \"apps/web/src/**/*.{ts,tsx}\""
     }
   }
 }

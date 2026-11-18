@@ -1,4 +1,7 @@
 import { ipcMain } from 'electron';
+import { resolve } from 'node:path';
+import { redactSensitiveData } from '@iptvnator/shared/logging';
+import { assertSafePlaybackUrl } from '../util/playback-url-guard';
 import {
     EMBEDDED_MPV_ADD_SUBTITLE,
     EMBEDDED_MPV_CREATE_SESSION,
@@ -62,11 +65,24 @@ function handleEmbeddedMpv<Args extends unknown[]>(
         try {
             return await handler(...(args as Args));
         } catch (error) {
-            console.error(`[Embedded MPV] ${channel} handler failed:`, error);
+            const safeError =
+                error instanceof Error
+                    ? Object.assign(
+                          new Error(String(redactSensitiveData(error.message))),
+                          { name: error.name }
+                      )
+                    : redactSensitiveData(error);
+            console.error(
+                `[Embedded MPV] ${channel} handler failed:`,
+                safeError
+            );
             throw error;
         }
     });
 }
+
+const authorizedSubtitlePaths = new Set<string>();
+const authorizedRecordingDirs = new Set<string>();
 
 /**
  * On Linux, support (and prepare, which checks support first) may run
@@ -113,8 +129,13 @@ handleEmbeddedMpv(
 
 handleEmbeddedMpv(
     EMBEDDED_MPV_LOAD_PLAYBACK,
-    (sessionId: string, playback: ResolvedPortalPlayback) =>
-        getService().loadPlayback(sessionId, playback)
+    (sessionId: string, playback: ResolvedPortalPlayback) => {
+        const safeStreamUrl = assertSafePlaybackUrl(playback?.streamUrl ?? '');
+        return getService().loadPlayback(sessionId, {
+            ...playback,
+            streamUrl: safeStreamUrl,
+        });
+    }
 );
 
 handleEmbeddedMpv(
@@ -159,8 +180,18 @@ handleEmbeddedMpv(
 
 handleEmbeddedMpv(
     EMBEDDED_MPV_ADD_SUBTITLE,
-    (sessionId: string, filePath: string) =>
-        getService().addSubtitle(sessionId, filePath)
+    (sessionId: string, filePath: string) => {
+        const normalized =
+            typeof filePath === 'string' && filePath.trim()
+                ? resolve(filePath.trim())
+                : '';
+        if (!normalized || !authorizedSubtitlePaths.has(normalized)) {
+            throw new Error(
+                'Subtitle file was not authorized by the file dialog.'
+            );
+        }
+        return getService().addSubtitle(sessionId, normalized);
+    }
 );
 
 handleEmbeddedMpv(
@@ -175,9 +206,13 @@ handleEmbeddedMpv(
         getService().setSubtitleStyle(sessionId, style)
 );
 
-handleEmbeddedMpv(EMBEDDED_MPV_SELECT_SUBTITLE_FILE, () =>
-    getService().selectSubtitleFile()
-);
+handleEmbeddedMpv(EMBEDDED_MPV_SELECT_SUBTITLE_FILE, async () => {
+    const selected = await getService().selectSubtitleFile();
+    if (selected) {
+        authorizedSubtitlePaths.add(resolve(selected));
+    }
+    return selected;
+});
 
 handleEmbeddedMpv(EMBEDDED_MPV_SET_SPEED, (sessionId: string, speed: number) =>
     getService().setSpeed(sessionId, speed)
@@ -191,8 +226,28 @@ handleEmbeddedMpv(
 
 handleEmbeddedMpv(
     EMBEDDED_MPV_START_RECORDING,
-    (sessionId: string, options: EmbeddedMpvRecordingStartOptions) =>
-        getService().startRecording(sessionId, options)
+    (sessionId: string, options: EmbeddedMpvRecordingStartOptions = {}) => {
+        const requestedDir = options.directory?.trim();
+        if (requestedDir) {
+            const normalizedDir = resolve(requestedDir);
+            const defaultDir = resolve(
+                getService().getDefaultRecordingFolder()
+            );
+            if (
+                normalizedDir !== defaultDir &&
+                !authorizedRecordingDirs.has(normalizedDir)
+            ) {
+                throw new Error(
+                    'Recording folder was not authorized by the folder dialog.'
+                );
+            }
+            return getService().startRecording(sessionId, {
+                ...options,
+                directory: normalizedDir,
+            });
+        }
+        return getService().startRecording(sessionId, options);
+    }
 );
 
 handleEmbeddedMpv(EMBEDDED_MPV_STOP_RECORDING, (sessionId: string) =>
@@ -203,9 +258,13 @@ handleEmbeddedMpv(EMBEDDED_MPV_GET_DEFAULT_RECORDING_FOLDER, () =>
     getService().getDefaultRecordingFolder()
 );
 
-handleEmbeddedMpv(EMBEDDED_MPV_SELECT_RECORDING_FOLDER, () =>
-    getService().selectRecordingFolder()
-);
+handleEmbeddedMpv(EMBEDDED_MPV_SELECT_RECORDING_FOLDER, async () => {
+    const selected = await getService().selectRecordingFolder();
+    if (selected) {
+        authorizedRecordingDirs.add(resolve(selected));
+    }
+    return selected;
+});
 
 handleEmbeddedMpv(EMBEDDED_MPV_DISPOSE_SESSION, (sessionId: string) =>
     getService().disposeSession(sessionId)
