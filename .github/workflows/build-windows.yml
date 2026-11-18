@@ -1,7 +1,7 @@
-# Installeur Windows TVNest, construit sur GitHub Actions (`windows-latest`, gratuit sur dépôt public).
-# Inclut Visual Studio / MSVC pour compiler `embedded-mpv` (`mpv-2.dll` + addons natifs).
+# Installeur Windows TVNest, construit sur le runner auto-hébergé (machine locale).
+# Un runner auto-hébergé ne consomme aucune minute GitHub Actions.
 #
-# - push sur master / lancement manuel : installeur .exe validé (et copié dans TVNEST_INSTALLERS_DIR s'il est défini)
+# - push sur master / lancement manuel : installeur .exe copié dans TVNEST_INSTALLERS_DIR
 # - tag v* (ex. v1.1.0) : installeur publié dans une Release GitHub (mise à jour auto)
 name: Build Windows installer
 
@@ -21,7 +21,7 @@ permissions:
 jobs:
     windows:
         name: Windows x64 (.exe)
-        runs-on: windows-latest
+        runs-on: [self-hosted, Windows, X64]
         timeout-minutes: 90
         defaults:
             run:
@@ -36,11 +36,6 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v7
-
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: '22'
 
             - name: Verify release tag matches package.json version
               if: ${{ startsWith(github.ref, 'refs/tags/v') }}
